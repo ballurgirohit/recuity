@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview Notes</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; max-width: 900px; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; }
+      label { display: block; font-weight: 600; margin-top: 12px; }
+      input, textarea, select { width: 100%; padding: 8px; box-sizing: border-box; }
+      textarea { min-height: 140px; }
+      button { padding: 10px 14px; margin-top: 12px; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-top: 12px; }
+      .muted { color: #666; font-size: 12px; }
+      pre { white-space: pre-wrap; word-break: break-word; }
+      .error { color: #b00020; }
+      .layout { display: flex; gap: 16px; align-items: flex-start; }
+      .left { flex: 2; min-width: 520px; }
+      .right { flex: 1; min-width: 320px; }
+      .btnRow { display: flex; gap: 8px; flex-wrap: wrap; }
+    </style>
+  </head>
+  <body>
+    <!-- <h1>Interview Notes</h1> -->
+
+    <div class="layout">
+      <div class="left">
+        <section class="card">
+          <h2>Add / Update notes</h2>
+          <div class="row">
+            <div style="flex: 1; min-width: 240px;">
+              <label for="name">Name</label>
+              <input id="name" autocomplete="name" />
+            </div>
+            <div style="flex: 1; min-width: 240px;">
+              <label for="email">Email</label>
+              <input id="email" type="email" autocomplete="email" />
+            </div>
+            <div style="flex: 1; min-width: 240px;">
+              <label for="status">Status</label>
+              <select id="status">
+                <option>New</option>
+                <option>Shortlisted for L1</option>
+                <option>Shortlisted for L2</option>
+                <option>Shortlisted for L3</option>
+                <option>Offer made</option>
+                <option>Offer accepted</option>
+                <option>Offer rejected</option>
+                <option>Rejected in L1</option>
+                <option>Rejected in L2</option>
+                <option>Rejected in L3</option>
+                <option>Kept on hold</option>
+              </select>
+            </div>
+          </div>
+
+          <label for="comments">Interview comments</label>
+          <textarea id="comments"></textarea>
+
+          <button id="saveBtn">Save</button>
+          <div id="saveStatus" class="muted"></div>
+          <div id="saveError" class="error"></div>
+        </section>
+
+        <section class="card">
+          <h2>Search</h2>
+          <div class="row">
+            <div style="flex: 1; min-width: 260px;">
+              <label for="search">Name or email</label>
+              <input id="search" placeholder="e.g. alex or alex@example.com" />
+            </div>
+            <div style="flex: 1; min-width: 240px;">
+              <label for="searchStatus">Status</label>
+              <select id="searchStatus">
+                <option value="">Any</option>
+                <option>New</option>
+                <option>Shortlisted for L1</option>
+                <option>Shortlisted for L2</option>
+                <option>Shortlisted for L3</option>
+                <option>Offer made</option>
+                <option>Offer accepted</option>
+                <option>Offer rejected</option>
+                <option>Rejected in L1</option>
+                <option>Rejected in L2</option>
+                <option>Rejected in L3</option>
+                <option>Kept on hold</option>
+              </select>
+            </div>
+            <div>
+              <button id="searchBtn">Search</button>
+            </div>
+          </div>
+          <div id="results"></div>
+        </section>
+      </div>
+
+      <div class="right">
+        <section class="card">
+          <h2>Requisitions</h2>
+
+          <label for="reqId">Requisition id</label>
+          <input id="reqId" placeholder="e.g. REQ-123" />
+
+          <label for="reqName">Requisition name</label>
+          <input id="reqName" placeholder="e.g. Senior Backend Engineer" />
+
+          <label for="reqStatus">Status</label>
+          <input id="reqStatus" placeholder="e.g. Open" />
+
+          <label for="reqLink">Link</label>
+          <input id="reqLink" placeholder="https://..." />
+
+          <div class="btnRow">
+            <button id="reqSaveBtn">Save</button>
+            <button id="reqClearBtn" type="button">Clear</button>
+          </div>
+
+          <div id="reqStatusMsg" class="muted"></div>
+          <div id="reqError" class="error"></div>
+
+          <h3 style="margin-top: 16px;">All requisitions</h3>
+          <div id="reqList"></div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      function resetForm() {
+        $('name').value = '';
+        $('email').value = '';
+        $('status').value = 'New';
+        $('comments').value = '';
+        $('saveError').textContent = '';
+      }
+
+      async function save() {
+        $('saveError').textContent = '';
+        $('saveStatus').textContent = 'Saving...';
+
+        const payload = {
+          name: $('name').value,
+          email: $('email').value,
+          status: $('status').value,
+          comments: $('comments').value
+        };
+
+        const resp = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          $('saveStatus').textContent = '';
+          $('saveError').textContent = data?.details ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+
+        $('saveStatus').textContent = `Saved. Updated at ${data.note.updated_at}`;
+        resetForm();
+        $('name').focus();
+      }
+
+      function renderResults(items) {
+        const host = $('results');
+        host.innerHTML = '';
+
+        if (!items.length) {
+          host.innerHTML = '<div class="muted">No results</div>';
+          return;
+        }
+
+        for (const r of items) {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+            <div class="row" style="align-items: baseline; justify-content: space-between;">
+              <div>
+                <strong>${escapeHtml(r.name)}</strong> &lt;${escapeHtml(r.email)}&gt;
+              </div>
+              <div class="row" style="gap: 8px;">
+                <button type="button" data-action="edit" data-email="${escapeHtml(r.email)}">Edit</button>
+                <button type="button" data-action="delete" data-email="${escapeHtml(r.email)}">Delete</button>
+              </div>
+            </div>
+            <div class="muted">Status: ${escapeHtml(r.status || 'New')}</div>
+            <div class="muted">Created: ${r.created_at} | Updated: ${r.updated_at}</div>
+            <pre>${escapeHtml(r.comments)}</pre>
+          `;
+
+          div.querySelector('[data-action="edit"]').addEventListener('click', () => {
+            $('name').value = r.name;
+            $('email').value = r.email;
+            $('status').value = r.status || 'New';
+            $('comments').value = r.comments;
+            $('saveError').textContent = '';
+            $('saveStatus').textContent = 'Editing loaded note. Click Save to update.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            $('comments').focus();
+          });
+
+          div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+            const ok = window.confirm(`Delete notes for ${r.email}? This cannot be undone.`);
+            if (!ok) return;
+
+            const resp = await fetch(`/api/notes/${encodeURIComponent(r.email)}`, { method: 'DELETE' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              $('results').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Delete failed')}</div>`;
+              return;
+            }
+            // Remove card from UI without requiring a new search.
+            div.remove();
+          });
+
+          host.appendChild(div);
+        }
+      }
+
+      async function search() {
+        const q = $('search').value.trim();
+        const status = $('searchStatus').value.trim();
+        if (!q && !status) return;
+
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (status) params.set('status', status);
+
+        const resp = await fetch(`/api/notes/search?${params.toString()}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+          $('results').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Search failed')}</div>`;
+          return;
+        }
+        renderResults(data.results);
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      $('saveBtn').addEventListener('click', save);
+      $('searchBtn').addEventListener('click', search);
+      $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+
+      $('comments').addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') save();
+      });
+
+      function resetReqForm() {
+        $('reqId').value = '';
+        $('reqName').value = '';
+        $('reqStatus').value = '';
+        $('reqLink').value = '';
+        $('reqError').textContent = '';
+        $('reqStatusMsg').textContent = '';
+      }
+
+      async function loadRequisitions() {
+        const resp = await fetch('/api/requisitions');
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          $('reqList').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Failed to load requisitions')}</div>`;
+          return;
+        }
+        renderRequisitions(data.requisitions || []);
+      }
+
+      function renderRequisitions(items) {
+        const host = $('reqList');
+        host.innerHTML = '';
+
+        if (!items.length) {
+          host.innerHTML = '<div class="muted">No requisitions</div>';
+          return;
+        }
+
+        for (const r of items) {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+            <div class="row" style="align-items: baseline; justify-content: space-between;">
+              <div>
+                <strong>${escapeHtml(r.reqId)}</strong>
+                <div class="muted">${escapeHtml(r.name || '')}</div>
+              </div>
+              <div class="row" style="gap: 8px;">
+                <button type="button" data-action="edit">Modify</button>
+                <button type="button" data-action="delete">Delete</button>
+              </div>
+            </div>
+            <div class="muted">Status: ${escapeHtml(r.status)}</div>
+            <div><a href="${escapeHtml(r.link)}" target="_blank" rel="noopener noreferrer">Open link</a></div>
+          `;
+
+          div.querySelector('[data-action="edit"]').addEventListener('click', () => {
+            $('reqId').value = r.reqId;
+            $('reqName').value = r.name || '';
+            $('reqStatus').value = r.status;
+            $('reqLink').value = r.link;
+            $('reqError').textContent = '';
+            $('reqStatusMsg').textContent = 'Loaded requisition. Click Save to update.';
+          });
+
+          div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+            const ok = window.confirm(`Delete requisition ${r.reqId}? This cannot be undone.`);
+            if (!ok) return;
+
+            const resp = await fetch(`/api/requisitions/${encodeURIComponent(r.reqId)}`, { method: 'DELETE' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              $('reqError').textContent = data?.error || 'Delete failed';
+              return;
+            }
+
+            div.remove();
+          });
+
+          host.appendChild(div);
+        }
+      }
+
+      async function saveRequisition() {
+        $('reqError').textContent = '';
+        $('reqStatusMsg').textContent = 'Saving...';
+
+        const payload = {
+          reqId: $('reqId').value,
+          name: $('reqName').value,
+          status: $('reqStatus').value,
+          link: $('reqLink').value
+        };
+
+        const resp = await fetch('/api/requisitions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          $('reqStatusMsg').textContent = '';
+          $('reqError').textContent = data?.details ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+
+        $('reqStatusMsg').textContent = `Saved. Updated at ${data.requisition.updated_at}`;
+        resetReqForm();
+        await loadRequisitions();
+      }
+
+      // Hook up buttons
+      $('reqSaveBtn').addEventListener('click', saveRequisition);
+      $('reqClearBtn').addEventListener('click', resetReqForm);
+
+      // Load requisitions at startup
+      loadRequisitions();
+    </script>
+  </body>
+</html>
