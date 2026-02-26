@@ -7,6 +7,62 @@ const dbPath = path.join(dataDir, 'hiring.sqlite');
 
 let db;
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function formatStatusAuditLine({ fromStatus, toStatus, at }) {
+  const ts = String(at).replace('T', ' ').replace('Z', '');
+  const from = fromStatus ? String(fromStatus) : '∅';
+  const to = toStatus ? String(toStatus) : '∅';
+  return `[${ts}] Status: ${from} → ${to}`;
+}
+
+function appendLine(existing, line) {
+  const base = String(existing ?? '');
+  if (!base) return line;
+  return base.endsWith('\n') ? `${base}${line}` : `${base}\n${line}`;
+}
+
+function getExistingNoteForUpsert({ name, email }) {
+  const normalizedEmail = String(email ?? '').trim();
+  if (normalizedEmail) {
+    const stmt = db.prepare(`
+      SELECT id, name, email, COALESCE(status, 'New') AS status, requisition_id AS requisitionId, comments
+      FROM candidate_notes
+      WHERE lower(email) = lower(@email)
+      LIMIT 1;
+    `);
+    return stmt.get({ email: normalizedEmail });
+  }
+
+  const stmt = db.prepare(`
+    SELECT id, name, email, COALESCE(status, 'New') AS status, requisition_id AS requisitionId, comments
+    FROM candidate_notes
+    WHERE lower(name) = lower(@name)
+      AND (email IS NULL OR email = '')
+    LIMIT 1;
+  `);
+  return stmt.get({ name: String(name ?? '').trim() });
+}
+
+function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments }) {
+  const prevStatus = existing?.status ?? null;
+  const nextStatus = newStatus ?? null;
+
+  // Preserve existing comments unless the UI provided a new value.
+  // (UI always sends comments; keep behavior that user can overwrite notes.)
+  let comments = String(incomingComments ?? '');
+
+  // If there is an existing record and the status changed, append an audit line.
+  if (existing && prevStatus !== nextStatus) {
+    const line = formatStatusAuditLine({ fromStatus: prevStatus, toStatus: nextStatus, at: nowIso() });
+    comments = appendLine(comments, line);
+  }
+
+  return comments;
+}
+
 function initDb() {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   db = new Database(dbPath);
@@ -30,6 +86,7 @@ function initDb() {
           name TEXT NOT NULL,
           email TEXT,
           status TEXT NOT NULL DEFAULT 'New',
+          requisition_id TEXT,
           comments TEXT NOT NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -39,8 +96,8 @@ function initDb() {
           ON candidate_notes(lower(email))
           WHERE email IS NOT NULL AND email <> '';
 
-        INSERT INTO candidate_notes (id, name, email, status, comments, created_at, updated_at)
-        SELECT id, name, email, COALESCE(status, 'New'), comments, created_at, updated_at
+        INSERT INTO candidate_notes (id, name, email, status, requisition_id, comments, created_at, updated_at)
+        SELECT id, name, email, COALESCE(status, 'New'), requisition_id, comments, created_at, updated_at
         FROM candidate_notes_old;
 
         DROP TABLE candidate_notes_old;
@@ -57,6 +114,14 @@ function initDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS ux_candidate_notes_email_not_null
       ON candidate_notes(lower(email))
       WHERE email IS NOT NULL AND email <> '';
+  `);
+
+  // Ensure name is unique (case-insensitive) for notes that don't have an email.
+  // This allows editing by name without creating new rows.
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_candidate_notes_name_when_no_email
+      ON candidate_notes(lower(name))
+      WHERE (email IS NULL OR email = '');
   `);
 
   // Requisitions table
@@ -90,6 +155,13 @@ function initDb() {
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_candidate_notes_status ON candidate_notes(status);');
 
+  // Add requisition_id column to candidate_notes if missing
+  const hasReqId = cols.some((c) => c.name === 'requisition_id');
+  if (!hasReqId) {
+    db.exec("ALTER TABLE candidate_notes ADD COLUMN requisition_id TEXT;");
+    db.exec('CREATE INDEX IF NOT EXISTS idx_candidate_notes_requisition_id ON candidate_notes(requisition_id);');
+  }
+
   // 3) FTS (create after all columns exist). We drop/recreate to keep schema in sync.
   db.exec(`
     DROP TABLE IF EXISTS candidate_notes_fts;
@@ -99,6 +171,7 @@ function initDb() {
       name,
       email,
       status,
+      requisition_id,
       comments,
       content='candidate_notes',
       content_rowid='id',
@@ -110,62 +183,154 @@ function initDb() {
     DROP TRIGGER IF EXISTS candidate_notes_au;
 
     CREATE TRIGGER candidate_notes_ai AFTER INSERT ON candidate_notes BEGIN
-      INSERT INTO candidate_notes_fts(rowid, name, email, status, comments)
-      VALUES (new.id, new.name, new.email, new.status, new.comments);
+      INSERT INTO candidate_notes_fts(rowid, name, email, status, requisition_id, comments)
+      VALUES (new.id, new.name, new.email, new.status, new.requisition_id, new.comments);
     END;
 
     CREATE TRIGGER candidate_notes_ad AFTER DELETE ON candidate_notes BEGIN
-      INSERT INTO candidate_notes_fts(candidate_notes_fts, rowid, name, email, status, comments)
-      VALUES ('delete', old.id, old.name, old.email, old.status, old.comments);
+      INSERT INTO candidate_notes_fts(candidate_notes_fts, rowid, name, email, status, requisition_id, comments)
+      VALUES ('delete', old.id, old.name, old.email, old.status, old.requisition_id, old.comments);
     END;
 
     CREATE TRIGGER candidate_notes_au AFTER UPDATE ON candidate_notes BEGIN
-      INSERT INTO candidate_notes_fts(candidate_notes_fts, rowid, name, email, status, comments)
-      VALUES ('delete', old.id, old.name, old.email, old.status, old.comments);
-      INSERT INTO candidate_notes_fts(rowid, name, email, status, comments)
-      VALUES (new.id, new.name, new.email, new.status, new.comments);
+      INSERT INTO candidate_notes_fts(candidate_notes_fts, rowid, name, email, status, requisition_id, comments)
+      VALUES ('delete', old.id, old.name, old.email, old.status, old.requisition_id, old.comments);
+      INSERT INTO candidate_notes_fts(rowid, name, email, status, requisition_id, comments)
+      VALUES (new.id, new.name, new.email, new.status, new.requisition_id, new.comments);
     END;
 
-    INSERT INTO candidate_notes_fts(rowid, name, email, status, comments)
-    SELECT id, name, email, status, comments
+    INSERT INTO candidate_notes_fts(rowid, name, email, status, requisition_id, comments)
+    SELECT id, name, email, status, requisition_id, comments
     FROM candidate_notes;
   `);
 }
 
-function createCandidateNote({ name, email, status, comments }) {
-  const now = new Date().toISOString();
+function createCandidateNote({ name, email, status, requisitionId, comments }) {
+  const now = nowIso();
   const stmt = db.prepare(`
-    INSERT INTO candidate_notes (name, email, status, comments, created_at, updated_at)
-    VALUES (@name, NULLIF(@email, ''), @status, @comments, @now, @now)
-    RETURNING id, name, email, status, comments, created_at, updated_at;
+    INSERT INTO candidate_notes (name, email, status, requisition_id, comments, created_at, updated_at)
+    VALUES (@name, NULLIF(@email, ''), @status, NULLIF(@requisitionId, ''), @comments, @now, @now)
+    RETURNING id, name, email, status, requisition_id AS requisitionId, comments, created_at, updated_at;
   `);
-  return stmt.get({ name, email: email ?? '', status, comments, now });
+  return stmt.get({ name, email: email ?? '', status, requisitionId: requisitionId ?? '', comments, now });
 }
 
-function upsertCandidateNote({ name, email, status, comments }) {
-  const normalizedEmail = String(email ?? '').trim();
+function getNoEmailNoteByName(name) {
+  const stmt = db.prepare(`
+    SELECT id, name, email, COALESCE(status, 'New') AS status,
+      requisition_id AS requisitionId,
+      comments, created_at, updated_at
+    FROM candidate_notes
+    WHERE lower(name) = lower(@name)
+      AND (email IS NULL OR email = '')
+    LIMIT 1;
+  `);
+  return stmt.get({ name: String(name ?? '').trim() });
+}
 
-  // If email isn't provided, we can't upsert by unique key.
-  // In this case create a new note record.
-  if (!normalizedEmail) {
-    return createCandidateNote({ name, email: '', status, comments });
+function getNextAvailableNoEmailName(baseName) {
+  const base = String(baseName ?? '').trim();
+  if (!base) return base;
+
+  // Find existing names like:
+  //   base
+  //   base - 2
+  //   base - 3
+  // and return the next available suffix.
+  const rows = db.prepare(`
+    SELECT name
+    FROM candidate_notes
+    WHERE (email IS NULL OR email = '')
+      AND (
+        lower(name) = lower(@base)
+        OR lower(name) LIKE lower(@pattern)
+      )
+  `).all({
+    base,
+    pattern: `${base} - %`
+  });
+
+  let maxN = 1; // base itself
+  for (const r of rows) {
+    const m = String(r.name).match(/ - (\d+)$/);
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n)) maxN = Math.max(maxN, n);
+    }
   }
 
-  const now = new Date().toISOString();
+  const next = maxN + 1;
+  return `${base} - ${next}`;
+}
 
+function updateNoEmailNoteByName({ name, status, requisitionId, comments }) {
+  const now = nowIso();
   const stmt = db.prepare(`
-    INSERT INTO candidate_notes (name, email, status, comments, created_at, updated_at)
-    VALUES (@name, @email, @status, @comments, @now, @now)
-    ON CONFLICT DO UPDATE SET
-      name = excluded.name,
-      status = excluded.status,
-      comments = excluded.comments,
-      updated_at = excluded.updated_at
-    WHERE lower(candidate_notes.email) = lower(excluded.email)
-    RETURNING id, name, email, status, comments, created_at, updated_at;
+    UPDATE candidate_notes
+    SET status = @status,
+        requisition_id = NULLIF(@requisitionId, ''),
+        comments = @comments,
+        updated_at = @now
+    WHERE lower(name) = lower(@name)
+      AND (email IS NULL OR email = '')
+    RETURNING id, name, email, status, requisition_id AS requisitionId, comments, created_at, updated_at;
   `);
+  return stmt.get({ name, status, requisitionId: requisitionId ?? '', comments, now });
+}
 
-  return stmt.get({ name, email: normalizedEmail, status, comments, now });
+function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, comments }) {
+  const now = nowIso();
+  const stmt = db.prepare(`
+    UPDATE candidate_notes
+    SET email = @email,
+        status = @status,
+        requisition_id = NULLIF(@requisitionId, ''),
+        comments = @comments,
+        updated_at = @now
+    WHERE lower(name) = lower(@name)
+      AND (email IS NULL OR email = '')
+    RETURNING id, name, email, status, requisition_id AS requisitionId, comments, created_at, updated_at;
+  `);
+  return stmt.get({ name: String(name ?? '').trim(), email: String(email ?? '').trim(), status, requisitionId: requisitionId ?? '', comments, now });
+}
+
+function upsertCandidateNote({ name, email, status, requisitionId, comments, onNameConflict }) {
+  const normalizedEmail = String(email ?? '').trim();
+
+  // Find existing row first so we can append a dated status change line.
+  const existing = getExistingNoteForUpsert({ name, email: normalizedEmail });
+  const commentsWithAudit = buildCommentsWithStatusAudit({ existing, newStatus: status, incomingComments: comments });
+
+  // If the user provided an email but there is no existing record by email,
+  // allow "promoting" a no-email record (matched by name) to have this email.
+  if (normalizedEmail && !existing) {
+    const existingNoEmail = getNoEmailNoteByName(name);
+    if (existingNoEmail) {
+      return updateNoEmailNoteSetEmailByName({
+        name,
+        email: normalizedEmail,
+        status,
+        requisitionId,
+        comments: commentsWithAudit
+      });
+    }
+  }
+
+  // If email isn't provided, upsert by (case-insensitive) name.
+  const baseName = String(name ?? '').trim();
+  const mode = onNameConflict === 'suffix' ? 'suffix' : 'update';
+
+  const existingNoEmail = getNoEmailNoteByName(baseName);
+  if (existingNoEmail && mode === 'suffix') {
+    const newName = getNextAvailableNoEmailName(baseName);
+    return createCandidateNote({ name: newName, email: '', status, requisitionId, comments: commentsWithAudit });
+  }
+
+  if (existingNoEmail) {
+    return updateNoEmailNoteByName({ name: baseName, status, requisitionId, comments: commentsWithAudit });
+  }
+
+  return createCandidateNote({ name: baseName, email: '', status, requisitionId, comments: commentsWithAudit });
 }
 
 function getNoteByEmail(email) {
@@ -173,7 +338,9 @@ function getNoteByEmail(email) {
   if (!normalizedEmail) return null;
 
   const stmt = db.prepare(`
-    SELECT id, name, email, COALESCE(status, 'New') AS status, comments, created_at, updated_at
+    SELECT id, name, email, COALESCE(status, 'New') AS status,
+      requisition_id AS requisitionId,
+      comments, created_at, updated_at
     FROM candidate_notes
     WHERE lower(email) = lower(@email)
     LIMIT 1;
@@ -193,6 +360,18 @@ function deleteNoteByEmail(email) {
   return { deleted: info2.changes };
 }
 
+function deleteNoteById(id) {
+  const noteId = Number(id);
+  if (!Number.isFinite(noteId)) return { deleted: 0 };
+
+  const stmt = db.prepare(`
+    DELETE FROM candidate_notes
+    WHERE id = @id;
+  `);
+  const info = stmt.run({ id: noteId });
+  return { deleted: info.changes };
+}
+
 function searchNotes(input) {
   const q = typeof input === 'string' ? input : String(input?.q ?? '').trim();
   const status = typeof input === 'string' ? '' : String(input?.status ?? '').trim();
@@ -205,6 +384,7 @@ function searchNotes(input) {
         name,
         email,
         COALESCE(status, 'New') AS status,
+        requisition_id AS requisitionId,
         comments,
         created_at,
         updated_at
@@ -219,56 +399,65 @@ function searchNotes(input) {
   const raw = q;
   if (!raw && !status) return [];
 
+  // Build FTS terms; keep unicode letters/numbers and common email/url symbols.
   const terms = raw
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
-    .map((t) => t.replace(/[^a-z0-9@._-]/g, ''))
+    .map((t) => t.replace(/[^\p{L}\p{N}@._-]/gu, ''))
     .filter(Boolean);
 
-  const ftsQuery = terms.map((t) => `${t}*`).join(' AND ');
+  // If we can't build an FTS query (e.g. user typed only punctuation), use LIKE.
+  const ftsQuery = terms.length ? terms.map((t) => `${t}*`).join(' AND ') : '';
 
-  try {
-    const stmt = db.prepare(`
-      SELECT
-        cn.id,
-        cn.name,
-        cn.email,
-        COALESCE(cn.status, 'New') AS status,
-        cn.comments,
-        cn.created_at,
-        cn.updated_at
-      FROM candidate_notes_fts fts
-      JOIN candidate_notes cn ON cn.id = fts.rowid
-      WHERE candidate_notes_fts MATCH @ftsQuery
-        AND (@status = '' OR cn.status = @status)
-      ORDER BY cn.updated_at DESC
-      LIMIT 100;
-    `);
-    return stmt.all({ ftsQuery, status: status || '' });
-  } catch {
-    const likeQuery = `%${raw.toLowerCase()}%`;
-    const stmt = db.prepare(`
-      SELECT
-        id,
-        name,
-        email,
-        COALESCE(status, 'New') AS status,
-        comments,
-        created_at,
-        updated_at
-      FROM candidate_notes
-      WHERE (
-        lower(name) LIKE @likeQuery OR
-        lower(email) LIKE @likeQuery OR
-        lower(status) LIKE @likeQuery
-      )
-        AND (@status = '' OR status = @status)
-      ORDER BY updated_at DESC
-      LIMIT 100;
-    `);
-    return stmt.all({ likeQuery, status: status || '' });
+  // Prefer FTS results; fall back to LIKE.
+  if (ftsQuery) {
+    try {
+      const stmt = db.prepare(`
+        SELECT
+          cn.id,
+          cn.name,
+          cn.email,
+          COALESCE(cn.status, 'New') AS status,
+          cn.requisition_id AS requisitionId,
+          cn.comments,
+          cn.created_at,
+          cn.updated_at
+        FROM candidate_notes_fts fts
+        JOIN candidate_notes cn ON cn.id = fts.rowid
+        WHERE candidate_notes_fts MATCH @ftsQuery
+          AND (@status = '' OR cn.status = @status)
+        ORDER BY cn.updated_at DESC
+        LIMIT 100;
+      `);
+      return stmt.all({ ftsQuery, status: status || '' });
+    } catch {
+      // fall through to LIKE
+    }
   }
+
+  const likeQuery = `%${raw.toLowerCase()}%`;
+  const stmt = db.prepare(`
+    SELECT
+      id,
+      name,
+      email,
+      COALESCE(status, 'New') AS status,
+      requisition_id AS requisitionId,
+      comments,
+      created_at,
+      updated_at
+    FROM candidate_notes
+    WHERE (
+      lower(name) LIKE @likeQuery OR
+      lower(email) LIKE @likeQuery OR
+      lower(status) LIKE @likeQuery
+    )
+      AND (@status = '' OR status = @status)
+    ORDER BY updated_at DESC
+    LIMIT 100;
+  `);
+  return stmt.all({ likeQuery, status: status || '' });
 }
 
 function upsertRequisition({ reqId, name, status, link }) {
@@ -310,8 +499,12 @@ module.exports = {
   upsertCandidateNote,
   getNoteByEmail,
   deleteNoteByEmail,
+  deleteNoteById,
   searchNotes,
   upsertRequisition,
   listRequisitions,
-  deleteRequisition
+  deleteRequisition,
+  // exported for UI conflict check
+  getNoEmailNoteByName,
+  getNextAvailableNoEmailName
 };

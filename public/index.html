@@ -3,135 +3,201 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Interview Notes</title>
+    <title>Hiring Notes</title>
+
+    <!-- Bootstrap CSS (CDN) -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; max-width: 900px; }
-      .row { display: flex; gap: 12px; flex-wrap: wrap; }
-      label { display: block; font-weight: 600; margin-top: 12px; }
-      input, textarea, select { width: 100%; padding: 8px; box-sizing: border-box; }
-      textarea { min-height: 140px; }
-      button { padding: 10px 14px; margin-top: 12px; }
-      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-top: 12px; }
-      .muted { color: #666; font-size: 12px; }
-      pre { white-space: pre-wrap; word-break: break-word; }
-      .error { color: #b00020; }
-      .layout { display: flex; gap: 16px; align-items: flex-start; }
-      .left { flex: 2; min-width: 520px; }
-      .right { flex: 1; min-width: 320px; }
-      .btnRow { display: flex; gap: 8px; flex-wrap: wrap; }
+      body { background: #fbfcfe; }
+
+      /* Subtle rounded inputs/buttons */
+      .form-control, .form-select {
+        border-radius: 0.75rem;
+        border-color: #d0d7de;
+        background: #ffffff;
+      }
+      .form-control:focus, .form-select:focus {
+        border-color: #80b3ff;
+        box-shadow: 0 0 0 .25rem rgba(128, 179, 255, 0.2);
+      }
+
+      .btn { border-radius: 0.75rem; }
+      .btn.btn-light { border-color: #d0d7de; }
+
+      .card { border-color: #e6e8eb; }
+      pre { white-space: pre-wrap; word-break: break-word; margin-bottom: 0; }
+
+      /* Subtle dropdown (select) styling */
+      .form-select {
+        background-color: #fbfcfe;
+      }
+      .form-select:focus {
+        border-color: #b6c7dd;
+        box-shadow: 0 0 0 .2rem rgba(182, 199, 221, 0.25);
+      }
+
+      /* Match the arrow to a softer tone */
+      .form-select {
+        --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236e7781' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+      }
+
+      /* Floating label tweaks for subtle look */
+      .form-floating > .form-select {
+        padding-top: 1.25rem;
+        padding-bottom: 0.5rem;
+      }
+      .form-floating > label {
+        color: #6e7781;
+        font-size: 0.9rem;
+      }
     </style>
   </head>
   <body>
-    <!-- <h1>Interview Notes</h1> -->
+    <div class="container py-4">
+      <div class="row g-3 align-items-start">
+        <div class="col-lg-8">
+          <section class="card shadow-sm mb-3">
+            <div class="card-body">
+              <h2 class="h5 mb-3">Hiring Notes</h2>
 
-    <div class="layout">
-      <div class="left">
-        <section class="card">
-          <h2>Add / Update notes</h2>
-          <div class="row">
-            <div style="flex: 1; min-width: 240px;">
-              <label for="name">Name</label>
-              <input id="name" autocomplete="name" />
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <input id="name" class="form-control" autocomplete="name" placeholder="Name" aria-label="Name" />
+                </div>
+                <div class="col-md-4">
+                  <input id="email" class="form-control" type="email" autocomplete="email" placeholder="Email " aria-label="Email " />
+                </div>
+                <div class="col-md-4">
+                  <select id="status" class="form-select" aria-label="Status">
+                    <option value="" selected hidden>Status</option>
+                    <option>New</option>
+                    <option>Shortlisted for L1</option>
+                    <option>Shortlisted for L2</option>
+                    <option>Shortlisted for L3</option>
+                    <option>Offer made</option>
+                    <option>Offer accepted</option>
+                    <option>Offer rejected</option>
+                    <option>Rejected in L1</option>
+                    <option>Rejected in L2</option>
+                    <option>Rejected in L3</option>
+                    <option>Kept on hold</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <select id="reqSelect" class="form-select" aria-label="Requisition">
+                    <option value="" selected>Requisition </option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="mt-3">
+                <textarea id="comments" class="form-control" rows="6" placeholder="Hiring Notes" aria-label="Hiring Notes"></textarea>
+              </div>
+
+              <div class="d-flex gap-2 align-items-center mt-3">
+                <button id="saveBtn" class="btn btn-primary btn-sm">Save</button>
+                <button id="clearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+                <div id="saveStatus" class="text-muted small"></div>
+              </div>
+              <div id="saveError" class="text-danger small mt-1"></div>
             </div>
-            <div style="flex: 1; min-width: 240px;">
-              <label for="email">Email</label>
-              <input id="email" type="email" autocomplete="email" />
+          </section>
+
+          <section class="card shadow-sm">
+            <div class="card-body">
+              <h2 class="h5 mb-3">Search</h2>
+
+              <div class="row g-2 align-items-end">
+                <div class="col-md-6">
+                  <input id="search" class="form-control" placeholder="Name or email (e.g. alex or alex@example.com)" aria-label="Name or email" />
+                </div>
+                <div class="col-md-4">
+                  <select id="searchStatus" class="form-select" aria-label="Status">
+                    <option value="" selected>Any status</option>
+                    <option>New</option>
+                    <option>Shortlisted for L1</option>
+                    <option>Shortlisted for L2</option>
+                    <option>Shortlisted for L3</option>
+                    <option>Offer made</option>
+                    <option>Offer accepted</option>
+                    <option>Offer rejected</option>
+                    <option>Rejected in L1</option>
+                    <option>Rejected in L2</option>
+                    <option>Rejected in L3</option>
+                    <option>Kept on hold</option>
+                  </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                  <button id="searchClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+                </div>
+              </div>
+
+              <div id="results" class="mt-3"></div>
             </div>
-            <div style="flex: 1; min-width: 240px;">
-              <label for="status">Status</label>
-              <select id="status">
-                <option>New</option>
-                <option>Shortlisted for L1</option>
-                <option>Shortlisted for L2</option>
-                <option>Shortlisted for L3</option>
-                <option>Offer made</option>
-                <option>Offer accepted</option>
-                <option>Offer rejected</option>
-                <option>Rejected in L1</option>
-                <option>Rejected in L2</option>
-                <option>Rejected in L3</option>
-                <option>Kept on hold</option>
-              </select>
+          </section>
+        </div>
+
+        <div class="col-lg-4">
+          <section class="card shadow-sm">
+            <div class="card-body">
+              <h2 class="h5 mb-3">Requisitions</h2>
+
+              <div class="mb-2">
+                <input id="reqId" class="form-control" placeholder="Requisition id (e.g. REQ-123)" aria-label="Requisition id" />
+              </div>
+
+              <div class="mb-2">
+                <input id="reqName" class="form-control" placeholder="Requisition name (e.g. Senior Backend Engineer)" aria-label="Requisition name" />
+              </div>
+
+              <div class="mb-2">
+                <input id="reqStatus" class="form-control" placeholder="Status (e.g. Open)" aria-label="Status" />
+              </div>
+
+              <div class="mb-2">
+                <input id="reqLink" class="form-control" placeholder="Link (e.g. https://...)" aria-label="Link" />
+              </div>
+
+              <div class="d-flex gap-2 mt-2">
+                <button id="reqSaveBtn" class="btn btn-primary btn-sm">Save</button>
+                <button id="reqClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+              </div>
+
+              <div id="reqStatusMsg" class="text-muted small mt-2"></div>
+              <div id="reqError" class="text-danger small"></div>
+
+              <h3 class="h6 mt-4">All requisitions</h3>
+              <div id="reqList" class="mt-2"></div>
             </div>
-          </div>
-
-          <label for="comments">Interview comments</label>
-          <textarea id="comments"></textarea>
-
-          <button id="saveBtn">Save</button>
-          <div id="saveStatus" class="muted"></div>
-          <div id="saveError" class="error"></div>
-        </section>
-
-        <section class="card">
-          <h2>Search</h2>
-          <div class="row">
-            <div style="flex: 1; min-width: 260px;">
-              <label for="search">Name or email</label>
-              <input id="search" placeholder="e.g. alex or alex@example.com" />
-            </div>
-            <div style="flex: 1; min-width: 240px;">
-              <label for="searchStatus">Status</label>
-              <select id="searchStatus">
-                <option value="">Any</option>
-                <option>New</option>
-                <option>Shortlisted for L1</option>
-                <option>Shortlisted for L2</option>
-                <option>Shortlisted for L3</option>
-                <option>Offer made</option>
-                <option>Offer accepted</option>
-                <option>Offer rejected</option>
-                <option>Rejected in L1</option>
-                <option>Rejected in L2</option>
-                <option>Rejected in L3</option>
-                <option>Kept on hold</option>
-              </select>
-            </div>
-            <div>
-              <button id="searchBtn">Search</button>
-            </div>
-          </div>
-          <div id="results"></div>
-        </section>
-      </div>
-
-      <div class="right">
-        <section class="card">
-          <h2>Requisitions</h2>
-
-          <label for="reqId">Requisition id</label>
-          <input id="reqId" placeholder="e.g. REQ-123" />
-
-          <label for="reqName">Requisition name</label>
-          <input id="reqName" placeholder="e.g. Senior Backend Engineer" />
-
-          <label for="reqStatus">Status</label>
-          <input id="reqStatus" placeholder="e.g. Open" />
-
-          <label for="reqLink">Link</label>
-          <input id="reqLink" placeholder="https://..." />
-
-          <div class="btnRow">
-            <button id="reqSaveBtn">Save</button>
-            <button id="reqClearBtn" type="button">Clear</button>
-          </div>
-
-          <div id="reqStatusMsg" class="muted"></div>
-          <div id="reqError" class="error"></div>
-
-          <h3 style="margin-top: 16px;">All requisitions</h3>
-          <div id="reqList"></div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
 
+      // Track requisitions so search results can print a friendly requisition label.
+      let requisitionById = new Map();
+      function getReqLabel(reqId) {
+        const id = String(reqId || '').trim();
+        if (!id) return '';
+        const r = requisitionById.get(id);
+        if (!r) return id;
+        return r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+      }
+
       function resetForm() {
         $('name').value = '';
         $('email').value = '';
-        $('status').value = 'New';
+        $('status').value = '';
+        $('reqSelect').value = '';
         $('comments').value = '';
         $('saveError').textContent = '';
       }
@@ -140,11 +206,35 @@
         $('saveError').textContent = '';
         $('saveStatus').textContent = 'Saving...';
 
+        const name = $('name').value;
+        const email = $('email').value;
+        const status = $('status').value || 'New';
+        const requisitionId = $('reqSelect').value;
+        const comments = $('comments').value;
+
+        let onNameConflict;
+
+        // If email is empty, check for existing name and ask user what to do.
+        if (!String(email || '').trim()) {
+          const checkResp = await fetch(`/api/notes/name-exists?name=${encodeURIComponent(String(name || '').trim())}`);
+          const check = await checkResp.json().catch(() => ({}));
+          if (checkResp.ok && check.exists) {
+            const suggested = check.suggestedName || `${String(name).trim()} - 2`;
+            const choice = window.confirm(
+              `A note with name "${String(name).trim()}" already exists (without email).\n\n` +
+              `OK = Update existing\nCancel = Create new as "${suggested}"`
+            );
+            onNameConflict = choice ? 'update' : 'suffix';
+          }
+        }
+
         const payload = {
-          name: $('name').value,
-          email: $('email').value,
-          status: $('status').value,
-          comments: $('comments').value
+          name,
+          email,
+          status,
+          requisitionId,
+          comments,
+          ...(onNameConflict ? { onNameConflict } : {})
         };
 
         const resp = await fetch('/api/notes', {
@@ -170,50 +260,61 @@
         host.innerHTML = '';
 
         if (!items.length) {
-          host.innerHTML = '<div class="muted">No results</div>';
+          host.innerHTML = '<div class="text-muted small">No results</div>';
           return;
         }
 
         for (const r of items) {
           const div = document.createElement('div');
-          div.className = 'card';
+          div.className = 'card mb-2';
           div.innerHTML = `
-            <div class="row" style="align-items: baseline; justify-content: space-between;">
-              <div>
-                <strong>${escapeHtml(r.name)}</strong> &lt;${escapeHtml(r.email)}&gt;
+            <div class="card-body py-2">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div><strong>${escapeHtml(r.name)}</strong> <span class="text-muted">&lt;${escapeHtml(r.email || '')}&gt;</span></div>
+                  <div class="text-muted small">Status: ${escapeHtml(r.status || 'New')}</div>
+                  ${r.requisitionId ? `<div class="text-muted small">Req: ${escapeHtml(getReqLabel(r.requisitionId))}</div>` : ''}
+                  <div class="text-muted small">Created: ${r.created_at} | Updated: ${r.updated_at}</div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-light btn-sm" type="button" data-action="edit">Edit</button>
+                  <button class="btn btn-outline-danger btn-sm" type="button" data-action="delete">Delete</button>
+                </div>
               </div>
-              <div class="row" style="gap: 8px;">
-                <button type="button" data-action="edit" data-email="${escapeHtml(r.email)}">Edit</button>
-                <button type="button" data-action="delete" data-email="${escapeHtml(r.email)}">Delete</button>
-              </div>
+              <pre class="mt-2">${escapeHtml(r.comments)}</pre>
             </div>
-            <div class="muted">Status: ${escapeHtml(r.status || 'New')}</div>
-            <div class="muted">Created: ${r.created_at} | Updated: ${r.updated_at}</div>
-            <pre>${escapeHtml(r.comments)}</pre>
           `;
 
           div.querySelector('[data-action="edit"]').addEventListener('click', () => {
             $('name').value = r.name;
-            $('email').value = r.email;
-            $('status').value = r.status || 'New';
+            $('email').value = r.email || '';
+            $('status').value = r.status || '';
+            if ($('reqSelect')) $('reqSelect').value = r.requisitionId || '';
             $('comments').value = r.comments;
             $('saveError').textContent = '';
             $('saveStatus').textContent = 'Editing loaded note. Click Save to update.';
+
+            // Clear search UI and hide results after choosing an item to edit.
+            $('search').value = '';
+            $('searchStatus').value = '';
+            $('results').innerHTML = '';
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
             $('comments').focus();
           });
 
           div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-            const ok = window.confirm(`Delete notes for ${r.email}? This cannot be undone.`);
-            if (!ok) return;
+            const url = r.email
+              ? `/api/notes/${encodeURIComponent(r.email)}`
+              : `/api/notes/id/${encodeURIComponent(r.id)}`;
 
-            const resp = await fetch(`/api/notes/${encodeURIComponent(r.email)}`, { method: 'DELETE' });
+            const resp = await fetch(url, { method: 'DELETE' });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) {
-              $('results').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Delete failed')}</div>`;
+              $('results').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Delete failed')}</div>`;
               return;
             }
-            // Remove card from UI without requiring a new search.
+
             div.remove();
           });
 
@@ -233,7 +334,7 @@
         const resp = await fetch(`/api/notes/search?${params.toString()}`);
         const data = await resp.json();
         if (!resp.ok) {
-          $('results').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Search failed')}</div>`;
+          $('results').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Search failed')}</div>`;
           return;
         }
         renderResults(data.results);
@@ -248,12 +349,53 @@
           .replaceAll("'", '&#039;');
       }
 
+      function debounce(fn, waitMs) {
+        let t;
+        return (...args) => {
+          clearTimeout(t);
+          t = setTimeout(() => fn(...args), waitMs);
+        };
+      }
+
+      const searchDebounced = debounce(() => {
+        const q = $('search').value.trim();
+        const status = $('searchStatus').value.trim();
+        if (!q && !status) {
+          $('results').innerHTML = '';
+          return;
+        }
+        search();
+      }, 250);
+
+      function clearSearch() {
+        $('search').value = '';
+        $('searchStatus').value = '';
+        $('results').innerHTML = '';
+        $('search').focus();
+      }
+
       $('saveBtn').addEventListener('click', save);
-      $('searchBtn').addEventListener('click', search);
+      $('clearBtn').addEventListener('click', () => {
+        resetForm();
+        $('name').focus();
+      });
+
+      // Type-ahead search
+      $('search').addEventListener('input', () => searchDebounced());
+      $('searchStatus').addEventListener('change', () => searchDebounced());
+
+      // Keep Enter-to-search behavior
       $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 
       $('comments').addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') save();
+      });
+
+      $('searchClearBtn').addEventListener('click', clearSearch);
+
+      // Optional: Esc clears search
+      $('search').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') clearSearch();
       });
 
       function resetReqForm() {
@@ -269,10 +411,13 @@
         const resp = await fetch('/api/requisitions');
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
-          $('reqList').innerHTML = `<div class="error">${escapeHtml(data?.error || 'Failed to load requisitions')}</div>`;
+          $('reqList').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Failed to load requisitions')}</div>`;
           return;
         }
-        renderRequisitions(data.requisitions || []);
+
+        const items = data.requisitions || [];
+        requisitionById = new Map(items.map((r) => [r.reqId, r]));
+        renderRequisitions(items);
       }
 
       function renderRequisitions(items) {
@@ -280,26 +425,28 @@
         host.innerHTML = '';
 
         if (!items.length) {
-          host.innerHTML = '<div class="muted">No requisitions</div>';
+          host.innerHTML = '<div class="text-muted small">No requisitions</div>';
           return;
         }
 
         for (const r of items) {
           const div = document.createElement('div');
-          div.className = 'card';
+          div.className = 'card mb-2';
           div.innerHTML = `
-            <div class="row" style="align-items: baseline; justify-content: space-between;">
-              <div>
-                <strong>${escapeHtml(r.reqId)}</strong>
-                <div class="muted">${escapeHtml(r.name || '')}</div>
-              </div>
-              <div class="row" style="gap: 8px;">
-                <button type="button" data-action="edit">Modify</button>
-                <button type="button" data-action="delete">Delete</button>
+            <div class="card-body py-2">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div><strong>${escapeHtml(r.reqId)}</strong></div>
+                  <div class="text-muted small">${escapeHtml(r.name || '')}</div>
+                  <div class="text-muted small">Status: ${escapeHtml(r.status)}</div>
+                  <div class="small"><a href="${escapeHtml(r.link)}" target="_blank" rel="noopener noreferrer">Open link</a></div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-light btn-sm" type="button" data-action="edit">Edit</button>
+                  <button class="btn btn-outline-danger btn-sm" type="button" data-action="delete">Delete</button>
+                </div>
               </div>
             </div>
-            <div class="muted">Status: ${escapeHtml(r.status)}</div>
-            <div><a href="${escapeHtml(r.link)}" target="_blank" rel="noopener noreferrer">Open link</a></div>
           `;
 
           div.querySelector('[data-action="edit"]').addEventListener('click', () => {
@@ -312,9 +459,6 @@
           });
 
           div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-            const ok = window.confirm(`Delete requisition ${r.reqId}? This cannot be undone.`);
-            if (!ok) return;
-
             const resp = await fetch(`/api/requisitions/${encodeURIComponent(r.reqId)}`, { method: 'DELETE' });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) {
@@ -358,6 +502,39 @@
         await loadRequisitions();
       }
 
+      function populateRequisitionSelect(items) {
+        const sel = $('reqSelect');
+        const current = sel.value;
+        sel.innerHTML = '<option value="" selected>Requisition</option>';
+
+        for (const r of items) {
+          const opt = document.createElement('option');
+          opt.value = r.reqId;
+          opt.textContent = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          sel.appendChild(opt);
+        }
+
+        // keep selection if still present
+        sel.value = current;
+      }
+
+      async function loadRequisitionsForSelect() {
+        const resp = await fetch('/api/requisitions');
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) return;
+        populateRequisitionSelect(data.requisitions || []);
+      }
+
+      // When requisitions change (saved/deleted), reload selector too
+      const _loadRequisitionsOriginal = loadRequisitions;
+      loadRequisitions = async function () {
+        await _loadRequisitionsOriginal();
+        await loadRequisitionsForSelect();
+      };
+
+      // Initial load
+      loadRequisitionsForSelect();
+
       // Hook up buttons
       $('reqSaveBtn').addEventListener('click', saveRequisition);
       $('reqClearBtn').addEventListener('click', resetReqForm);
@@ -365,5 +542,12 @@
       // Load requisitions at startup
       loadRequisitions();
     </script>
+
+    <!-- Bootstrap JS (optional; used for some components) -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"
+    ></script>
   </body>
 </html>

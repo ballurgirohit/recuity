@@ -7,9 +7,12 @@ const {
   searchNotes,
   getNoteByEmail,
   deleteNoteByEmail,
+  deleteNoteById,
   upsertRequisition,
   listRequisitions,
-  deleteRequisition
+  deleteRequisition,
+  getNoEmailNoteByName,
+  getNextAvailableNoEmailName
 } = require('./storage');
 
 const app = express();
@@ -38,7 +41,9 @@ const upsertSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
   email: z.string().trim().max(320).optional().or(z.literal('')),
   status: z.enum(allowedStatuses).default('New'),
-  comments: z.string().trim().min(1, 'Comments are required').max(20000)
+  requisitionId: z.string().trim().max(100).optional().or(z.literal('')),
+  onNameConflict: z.enum(['update', 'suffix']).optional(),
+  comments: z.string().trim().max(20000).default('')
 }).superRefine((val, ctx) => {
   if (val.email && !z.string().email().safeParse(val.email).success) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Email must be valid if provided' });
@@ -51,8 +56,8 @@ app.post('/api/notes', (req, res) => {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   }
 
-  const { name, email, status, comments } = parsed.data;
-  const saved = upsertCandidateNote({ name, email, status, comments });
+  const { name, email, status, requisitionId, comments, onNameConflict } = parsed.data;
+  const saved = upsertCandidateNote({ name, email, status, requisitionId, comments, onNameConflict });
   return res.json({ ok: true, note: saved });
 });
 
@@ -71,6 +76,18 @@ app.get('/api/notes/search', (req, res) => {
   return res.json({ ok: true, results });
 });
 
+// NOTE: This must be declared before `/api/notes/:email`.
+app.get('/api/notes/name-exists', (req, res) => {
+  const name = String(req.query.name ?? '').trim();
+  if (!name) return res.status(400).json({ error: 'NameRequired' });
+
+  const existing = getNoEmailNoteByName(name);
+  if (!existing) return res.json({ ok: true, exists: false });
+
+  const suggested = getNextAvailableNoEmailName(name);
+  return res.json({ ok: true, exists: true, suggestedName: suggested, existing });
+});
+
 app.get('/api/notes/:email', (req, res) => {
   const email = String(req.params.email ?? '').trim();
   if (!email) return res.status(400).json({ error: 'EmailRequired' });
@@ -85,6 +102,15 @@ app.delete('/api/notes/:email', (req, res) => {
   if (!email) return res.status(400).json({ error: 'EmailRequired' });
 
   const result = deleteNoteByEmail(email);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  return res.json({ ok: true, deleted: result.deleted });
+});
+
+app.delete('/api/notes/id/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'IdRequired' });
+
+  const result = deleteNoteById(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   return res.json({ ok: true, deleted: result.deleted });
 });
