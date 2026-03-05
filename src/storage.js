@@ -24,6 +24,35 @@ function appendLine(existing, line) {
   return base.endsWith('\n') ? `${base}${line}` : `${base}\n${line}`;
 }
 
+function statusEquals(a, b) {
+  const norm = (v) => {
+    const s = String(v ?? '').trim();
+    return s || 'New';
+  };
+  return norm(a) === norm(b);
+}
+
+function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments }) {
+  const prevStatusRaw = existing?.status;
+  const nextStatusRaw = newStatus;
+
+  // UI sends comments; if blank is allowed, keep whatever user provided.
+  let comments = String(incomingComments ?? '');
+
+  // Append audit line when status changes.
+  // Treat missing/empty previous status as 'New' so the first change is recorded.
+  if (existing && !statusEquals(prevStatusRaw, nextStatusRaw)) {
+    const line = formatStatusAuditLine({
+      fromStatus: String(prevStatusRaw ?? '').trim() || 'New',
+      toStatus: String(nextStatusRaw ?? '').trim() || 'New',
+      at: nowIso()
+    });
+    comments = appendLine(comments, line);
+  }
+
+  return comments;
+}
+
 function getExistingNoteForUpsert({ name, email }) {
   const normalizedEmail = String(email ?? '').trim();
   if (normalizedEmail) {
@@ -44,23 +73,6 @@ function getExistingNoteForUpsert({ name, email }) {
     LIMIT 1;
   `);
   return stmt.get({ name: String(name ?? '').trim() });
-}
-
-function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments }) {
-  const prevStatus = existing?.status ?? null;
-  const nextStatus = newStatus ?? null;
-
-  // Preserve existing comments unless the UI provided a new value.
-  // (UI always sends comments; keep behavior that user can overwrite notes.)
-  let comments = String(incomingComments ?? '');
-
-  // If there is an existing record and the status changed, append an audit line.
-  if (existing && prevStatus !== nextStatus) {
-    const line = formatStatusAuditLine({ fromStatus: prevStatus, toStatus: nextStatus, at: nowIso() });
-    comments = appendLine(comments, line);
-  }
-
-  return comments;
 }
 
 function initDb() {
