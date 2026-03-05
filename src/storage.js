@@ -81,6 +81,30 @@ function initDb() {
 
   db.pragma('journal_mode = WAL');
 
+  // Ensure base tables exist for a fresh DB
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS candidate_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT,
+      status TEXT NOT NULL DEFAULT 'New',
+      requisition_id TEXT,
+      comments TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS requisitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      req_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      link TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Ensure candidate_notes table exists (legacy schema may have email NOT NULL UNIQUE)
   // Migration: if email is NOT NULL, we can't alter easily; create a new table and copy.
   const info = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='candidate_notes'").get();
@@ -138,16 +162,6 @@ function initDb() {
 
   // Requisitions table
   db.exec(`
-    CREATE TABLE IF NOT EXISTS requisitions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      req_id TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL,
-      link TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
     CREATE INDEX IF NOT EXISTS idx_requisitions_req_id ON requisitions(req_id);
     CREATE INDEX IF NOT EXISTS idx_requisitions_status ON requisitions(status);
   `);
