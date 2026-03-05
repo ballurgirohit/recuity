@@ -1,42 +1,34 @@
 # Hiring Interview Notes
 
-Simple web app to save and retrieve interview notes.
+Simple local web app to save and retrieve interview notes.
 
 ## Features
-- Add/update notes with **name**, **email**, and **comments**
+- Add/update notes with **name**, optional **email**, **status** and **hiring notes**
 - Data stored in a local **SQLite** database
-- Search notes anytime by **name or email**
+- Search notes by **name/email/status**
 
-## Run
-- Start the server:
-  - `npm run start`
-- Dev mode (auto-reload):
-  - `npm run dev`
+## Quick start (no setup)
+This repository includes everything needed to run the app.
 
-Then open http://localhost:3000
+### macOS
+1. Double-click `start.command`.
+2. Open http://localhost:3000
 
-## Start by double-click (macOS)
+To stop the server: close the Terminal window or press Ctrl+C.
 
-### Option 1: `.command` launcher (recommended)
+### Windows
+1. Double-click `start.bat`.
+2. Open http://localhost:3000
 
-This repo includes a `start.command` file you can double-click to start the server.
-
-1. Make it executable (one time):
-   - `chmod +x start.command`
-2. Double-click `start.command`.
-3. Open: http://localhost:3000
-
-To stop the server, close the Terminal window (or press Ctrl+C).
-
-### Option 2: Automator app
-
-You can also wrap the command in an Automator “Application” and drag it to your Desktop.
-
-- Automator → New Document → Application → “Run Shell Script”
-- Script:
-  - `cd "/Users/rohitballurgi/Desktop/Hiring"`
-  - `npm run start`
+To stop the server: close the Command Prompt window or press Ctrl+C.
 
 ## Data
-SQLite DB file is created at `data/hiring.sqlite`.
-# recuity
+The SQLite DB file is stored in `data/hiring.sqlite`.
+
+- If `data/` is shipped with the app, users will see the same data.
+- If `data/` is removed, the app will create a fresh database on first run.
+
+## Dev / advanced
+If you want to run it manually (or develop locally), use:
+- `npm run start`
+- `npm run dev`
