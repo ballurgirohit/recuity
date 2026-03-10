@@ -56,6 +56,28 @@
         color: #6e7781;
         font-size: 0.9rem;
       }
+
+      /* Notes collapse/expand */
+      .notes-collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .notes-expanded {
+        display: block;
+        overflow: visible;
+      }
+      .toggle-notes {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 0.8rem;
+        color: #0d6efd;
+        cursor: pointer;
+      }
+      .toggle-notes:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -281,9 +303,31 @@
                   <button class="btn btn-outline-danger btn-sm" type="button" data-action="delete">Delete</button>
                 </div>
               </div>
-              <pre class="mt-2">${escapeHtml(r.comments)}</pre>
+              <pre class="mt-2 notes-collapsed">${escapeHtml(r.comments)}</pre>
+              <button class="toggle-notes mt-1" type="button" style="display:none">Show more</button>
             </div>
           `;
+
+          const pre = div.querySelector('pre');
+          const toggle = div.querySelector('.toggle-notes');
+
+          // Show toggle only if content actually overflows 4 lines
+          requestAnimationFrame(() => {
+            if (pre.scrollHeight > pre.clientHeight) {
+              toggle.style.display = '';
+            }
+          });
+
+          toggle.addEventListener('click', () => {
+            const collapsed = pre.classList.contains('notes-collapsed');
+            if (collapsed) {
+              pre.classList.replace('notes-collapsed', 'notes-expanded');
+              toggle.textContent = 'Show less';
+            } else {
+              pre.classList.replace('notes-expanded', 'notes-collapsed');
+              toggle.textContent = 'Show more';
+            }
+          });
 
           div.querySelector('[data-action="edit"]').addEventListener('click', () => {
             $('name').value = r.name;
