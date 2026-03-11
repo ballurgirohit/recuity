@@ -64,15 +64,15 @@ app.post('/api/notes', (req, res) => {
 app.get('/api/notes/search', (req, res) => {
   const q = String(req.query.q ?? '').trim();
   const status = String(req.query.status ?? '').trim();
+  const requisitionId = String(req.query.requisitionId ?? '').trim();
 
-  if (!q && !status) return res.status(400).json({ error: 'QueryOrStatusRequired' });
+  if (!q && !status && !requisitionId) return res.status(400).json({ error: 'QueryOrStatusRequired' });
 
-  // Validate status if provided.
   if (status && !allowedStatuses.includes(status)) {
     return res.status(400).json({ error: 'InvalidStatus' });
   }
 
-  const results = searchNotes({ q, status });
+  const results = searchNotes({ q, status, requisitionId });
   return res.json({ ok: true, results });
 });
 

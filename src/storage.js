@@ -401,31 +401,28 @@ function deleteNoteById(id) {
 function searchNotes(input) {
   const q = typeof input === 'string' ? input : String(input?.q ?? '').trim();
   const status = typeof input === 'string' ? '' : String(input?.status ?? '').trim();
+  const requisitionId = typeof input === 'string' ? '' : String(input?.requisitionId ?? '').trim();
 
-  // If only status filter is provided, use an indexed query (no FTS required)
-  if (!q && status) {
+  // If only status/requisitionId filters are provided, use indexed query (no FTS required)
+  if (!q && (status || requisitionId)) {
     const stmt = db.prepare(`
       SELECT
-        id,
-        name,
-        email,
+        id, name, email,
         COALESCE(status, 'New') AS status,
         requisition_id AS requisitionId,
-        comments,
-        created_at,
-        updated_at
+        comments, created_at, updated_at
       FROM candidate_notes
-      WHERE status = @status
+      WHERE (@status = '' OR status = @status)
+        AND (@requisitionId = '' OR requisition_id = @requisitionId)
       ORDER BY updated_at DESC
       LIMIT 100;
     `);
-    return stmt.all({ status });
+    return stmt.all({ status: status || '', requisitionId: requisitionId || '' });
   }
 
   const raw = q;
-  if (!raw && !status) return [];
+  if (!raw && !status && !requisitionId) return [];
 
-  // Build FTS terms; keep unicode letters/numbers and common email/url symbols.
   const terms = raw
     .toLowerCase()
     .split(/\s+/)
@@ -433,30 +430,25 @@ function searchNotes(input) {
     .map((t) => t.replace(/[^\p{L}\p{N}@._-]/gu, ''))
     .filter(Boolean);
 
-  // If we can't build an FTS query (e.g. user typed only punctuation), use LIKE.
   const ftsQuery = terms.length ? terms.map((t) => `${t}*`).join(' AND ') : '';
 
-  // Prefer FTS results; fall back to LIKE.
   if (ftsQuery) {
     try {
       const stmt = db.prepare(`
         SELECT
-          cn.id,
-          cn.name,
-          cn.email,
+          cn.id, cn.name, cn.email,
           COALESCE(cn.status, 'New') AS status,
           cn.requisition_id AS requisitionId,
-          cn.comments,
-          cn.created_at,
-          cn.updated_at
+          cn.comments, cn.created_at, cn.updated_at
         FROM candidate_notes_fts fts
         JOIN candidate_notes cn ON cn.id = fts.rowid
         WHERE candidate_notes_fts MATCH @ftsQuery
           AND (@status = '' OR cn.status = @status)
+          AND (@requisitionId = '' OR cn.requisition_id = @requisitionId)
         ORDER BY cn.updated_at DESC
         LIMIT 100;
       `);
-      return stmt.all({ ftsQuery, status: status || '' });
+      return stmt.all({ ftsQuery, status: status || '', requisitionId: requisitionId || '' });
     } catch {
       // fall through to LIKE
     }
@@ -465,14 +457,10 @@ function searchNotes(input) {
   const likeQuery = `%${raw.toLowerCase()}%`;
   const stmt = db.prepare(`
     SELECT
-      id,
-      name,
-      email,
+      id, name, email,
       COALESCE(status, 'New') AS status,
       requisition_id AS requisitionId,
-      comments,
-      created_at,
-      updated_at
+      comments, created_at, updated_at
     FROM candidate_notes
     WHERE (
       lower(name) LIKE @likeQuery OR
@@ -480,10 +468,11 @@ function searchNotes(input) {
       lower(status) LIKE @likeQuery
     )
       AND (@status = '' OR status = @status)
+      AND (@requisitionId = '' OR requisition_id = @requisitionId)
     ORDER BY updated_at DESC
     LIMIT 100;
   `);
-  return stmt.all({ likeQuery, status: status || '' });
+  return stmt.all({ likeQuery, status: status || '', requisitionId: requisitionId || '' });
 }
 
 function upsertRequisition({ reqId, name, status, link }) {

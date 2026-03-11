@@ -136,7 +136,7 @@
               <h2 class="h5 mb-3">Search</h2>
 
               <div class="row g-2 align-items-end">
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <input id="search" class="form-control" placeholder="Name or email" aria-label="Name or email" />
                 </div>
                 <div class="col-md-4">
@@ -155,9 +155,14 @@
                     <option>Kept on hold</option>
                   </select>
                 </div>
-                <div class="col-md-2 d-grid">
-                  <button id="searchClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+                <div class="col-md-4">
+                  <select id="searchReqId" class="form-select" aria-label="Requisition">
+                    <option value="" selected>Any requisition</option>
+                  </select>
                 </div>
+              </div>
+              <div class="mt-2">
+                <button id="searchClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
               </div>
 
               <div id="results" class="mt-3"></div>
@@ -369,11 +374,13 @@
       async function search() {
         const q = $('search').value.trim();
         const status = $('searchStatus').value.trim();
-        if (!q && !status) return;
+        const reqId = $('searchReqId').value.trim();
+        if (!q && !status && !reqId) return;
 
         const params = new URLSearchParams();
         if (q) params.set('q', q);
         if (status) params.set('status', status);
+        if (reqId) params.set('requisitionId', reqId);
 
         const resp = await fetch(`/api/notes/search?${params.toString()}`);
         const data = await resp.json();
@@ -404,7 +411,8 @@
       const searchDebounced = debounce(() => {
         const q = $('search').value.trim();
         const status = $('searchStatus').value.trim();
-        if (!q && !status) {
+        const reqId = $('searchReqId').value.trim();
+        if (!q && !status && !reqId) {
           $('results').innerHTML = '';
           return;
         }
@@ -414,6 +422,7 @@
       function clearSearch() {
         $('search').value = '';
         $('searchStatus').value = '';
+        $('searchReqId').value = '';
         $('results').innerHTML = '';
         $('search').focus();
       }
@@ -427,6 +436,7 @@
       // Type-ahead search
       $('search').addEventListener('input', () => searchDebounced());
       $('searchStatus').addEventListener('change', () => searchDebounced());
+      $('searchReqId').addEventListener('change', () => searchDebounced());
 
       // Keep Enter-to-search behavior
       $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
@@ -560,6 +570,20 @@
 
         // keep selection if still present
         sel.value = current;
+
+        const searchSel = $('searchReqId');
+        const searchCurrent = searchSel.value;
+        searchSel.innerHTML = '<option value="" selected>Any requisition</option>';
+
+        for (const r of items) {
+          const opt = document.createElement('option');
+          opt.value = r.reqId;
+          opt.textContent = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          searchSel.appendChild(opt);
+        }
+
+        // keep selection if still present
+        searchSel.value = searchCurrent;
       }
 
       async function loadRequisitionsForSelect() {
