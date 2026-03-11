@@ -15,10 +15,24 @@ const {
   getNextAvailableNoEmailName
 } = require('./storage');
 
+const {
+  initLeaveDb,
+  listEmployees,
+  upsertEmployee,
+  deleteEmployee,
+  getLeavesForMonth,
+  upsertLeave,
+  deleteLeave,
+  listAllHolidays,
+  upsertHoliday,
+  deleteHoliday
+} = require('./leave-storage');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 initDb();
+initLeaveDb();
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -144,6 +158,89 @@ app.delete('/api/requisitions/:reqId', (req, res) => {
   const result = deleteRequisition(reqId);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   return res.json({ ok: true, deleted: result.deleted });
+});
+
+// ── Leave Management API ───────────────────────────────────────────────────────
+
+const employeeSchema = z.object({
+  name:  z.string().trim().min(1, 'Name is required').max(200),
+  email: z.string().trim().email('Must be a valid email').max(320).optional().or(z.literal(''))
+});
+
+const leaveSchema = z.object({
+  employeeId: z.number({ coerce: true }).int().positive(),
+  date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  leaveType:  z.enum(['Full Day', 'Half Day - AM', 'Half Day - PM']).default('Full Day'),
+  note:       z.string().trim().max(500).default('')
+});
+
+const holidaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  name: z.string().trim().min(1, 'Holiday name is required').max(200)
+});
+
+const yearMonthRe = /^\d{4}-\d{2}$/;
+
+// Employees
+app.get('/api/leave/employees', (_req, res) => {
+  res.json({ ok: true, employees: listEmployees() });
+});
+
+app.post('/api/leave/employees', (req, res) => {
+  const parsed = employeeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const emp = upsertEmployee(parsed.data);
+  res.json({ ok: true, employee: emp });
+});
+
+app.delete('/api/leave/employees/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteEmployee(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// Leaves
+app.get('/api/leave/month/:yearMonth', (req, res) => {
+  const ym = req.params.yearMonth;
+  if (!yearMonthRe.test(ym)) return res.status(400).json({ error: 'InvalidYearMonth — use YYYY-MM' });
+  res.json({ ok: true, leaves: getLeavesForMonth(ym) });
+});
+
+app.post('/api/leave/leaves', (req, res) => {
+  const parsed = leaveSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const leave = upsertLeave(parsed.data);
+  res.json({ ok: true, leave });
+});
+
+app.delete('/api/leave/leaves/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteLeave(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// Holidays
+app.get('/api/leave/holidays', (_req, res) => {
+  res.json({ ok: true, holidays: listAllHolidays() });
+});
+
+app.post('/api/leave/holidays', (req, res) => {
+  const parsed = holidaySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const holiday = upsertHoliday(parsed.data);
+  res.json({ ok: true, holiday });
+});
+
+app.delete('/api/leave/holidays/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteHoliday(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
 });
 
 app.listen(PORT, () => {

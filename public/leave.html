@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leave Management</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+    <style>
+      body { background: #fbfcfe; }
+      .form-control, .form-select {
+        border-radius: 0.75rem; border-color: #d0d7de; background: #ffffff;
+      }
+      .form-control:focus, .form-select:focus {
+        border-color: #80b3ff; box-shadow: 0 0 0 .25rem rgba(128,179,255,.2);
+      }
+      .btn { border-radius: 0.75rem; }
+      .btn.btn-light { border-color: #d0d7de; }
+      .card { border-color: #e6e8eb; }
+
+      /* ── Calendar ── */
+      .cal-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
+      .cal-table th {
+        background: #f3f4f6; border: 1px solid #e6e8eb;
+        padding: 4px 2px; text-align: center; font-weight: 600; font-size: 0.75rem;
+      }
+      .cal-table th.emp-col { width: 130px; text-align: left; padding-left: 6px; }
+      .cal-table td {
+        border: 1px solid #e6e8eb; padding: 2px; vertical-align: middle;
+        height: 36px; text-align: center; cursor: pointer;
+      }
+      .cal-table td.emp-name {
+        text-align: left; padding-left: 6px; font-weight: 500;
+        cursor: default; background: #fafafa;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .cal-table td.weekend { background: #f8f9fa; color: #adb5bd; }
+      .cal-table td.holiday { background: #fff3cd; }
+      .cal-table td.today   { outline: 2px solid #0d6efd; outline-offset: -2px; }
+
+      .leave-badge {
+        display: inline-block; font-size: 0.65rem; font-weight: 600;
+        border-radius: 4px; padding: 1px 4px; line-height: 1.4; white-space: nowrap;
+      }
+      .leave-full { background: #d1e7dd; color: #0a3622; }
+      .leave-am   { background: #cfe2ff; color: #084298; }
+      .leave-pm   { background: #e0cffc; color: #3d0a91; }
+
+      .nav-tabs .nav-link { border-radius: 0.75rem 0.75rem 0 0; }
+      .month-nav { gap: 0.5rem; }
+    </style>
+  </head>
+  <body>
+
+    <!-- Shared nav -->
+    <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-3 px-3">
+      <span class="navbar-brand fw-semibold">Recuity</span>
+      <div class="navbar-nav">
+        <a class="nav-link" href="/index.html">Hiring</a>
+        <a class="nav-link active fw-semibold" href="/leave.html">Leave</a>
+      </div>
+    </nav>
+
+    <div class="container-fluid px-3">
+      <div class="row g-3 align-items-start">
+
+        <!-- ── Left: Calendar ── -->
+        <div class="col-lg-9">
+          <section class="card shadow-sm">
+            <div class="card-body">
+
+              <div class="d-flex align-items-center month-nav mb-3">
+                <button id="prevMonth" class="btn btn-light btn-sm">&#8592;</button>
+                <h2 id="monthLabel" class="h5 mb-0 mx-2" style="min-width:170px;text-align:center"></h2>
+                <button id="nextMonth" class="btn btn-light btn-sm">&#8594;</button>
+                <button id="todayBtn" class="btn btn-light btn-sm ms-2">Today</button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="cal-table">
+                  <thead id="calHead"></thead>
+                  <tbody id="calBody"></tbody>
+                </table>
+              </div>
+
+              <!-- Legend -->
+              <div class="d-flex gap-3 mt-2" style="font-size:0.75rem;flex-wrap:wrap">
+                <span><span class="leave-badge leave-full">F</span> Full Day</span>
+                <span><span class="leave-badge leave-am">AM</span> Half Day AM</span>
+                <span><span class="leave-badge leave-pm">PM</span> Half Day PM</span>
+                <span>
+                  <span style="display:inline-block;width:12px;height:12px;background:#fff3cd;border:1px solid #ced4da;vertical-align:middle"></span>
+                  Holiday
+                </span>
+              </div>
+
+            </div>
+          </section>
+        </div>
+
+        <!-- ── Right: side panels ── -->
+        <div class="col-lg-3">
+
+          <ul class="nav nav-tabs mb-0" id="sideTabs">
+            <li class="nav-item">
+              <button class="nav-link active" data-tab="empTab">Employees</button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" data-tab="holTab">Holidays</button>
+            </li>
+          </ul>
+
+          <!-- Employees panel -->
+          <section class="card shadow-sm border-top-0" id="empTab">
+            <div class="card-body">
+              <h3 class="h6 mb-3">Add / Update Employee</h3>
+              <div class="mb-2">
+                <input id="empName" class="form-control form-control-sm" placeholder="Name" />
+              </div>
+              <div class="mb-2">
+                <input id="empEmail" class="form-control form-control-sm" type="email" placeholder="Email (optional)" />
+              </div>
+              <div class="d-flex gap-2 mb-1">
+                <button id="empSaveBtn" class="btn btn-primary btn-sm">Save</button>
+                <button id="empClearBtn" class="btn btn-light btn-sm">Clear</button>
+              </div>
+              <div id="empMsg" class="text-muted small mt-1"></div>
+              <div id="empErr" class="text-danger small"></div>
+
+              <h3 class="h6 mt-4 mb-2">All Employees</h3>
+              <div id="empList"></div>
+            </div>
+          </section>
+
+          <!-- Holidays panel -->
+          <section class="card shadow-sm border-top-0 d-none" id="holTab">
+            <div class="card-body">
+              <h3 class="h6 mb-3">Add / Update Holiday</h3>
+              <div class="mb-2">
+                <input id="holDate" class="form-control form-control-sm" type="date" />
+              </div>
+              <div class="mb-2">
+                <input id="holName" class="form-control form-control-sm" placeholder="Holiday name" />
+              </div>
+              <div class="d-flex gap-2 mb-1">
+                <button id="holSaveBtn" class="btn btn-primary btn-sm">Save</button>
+                <button id="holClearBtn" class="btn btn-light btn-sm">Clear</button>
+              </div>
+              <div id="holMsg" class="text-muted small mt-1"></div>
+              <div id="holErr" class="text-danger small"></div>
+
+              <h3 class="h6 mt-4 mb-2">All Holidays</h3>
+              <div id="holList"></div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Leave modal -->
+    <div class="modal fade" id="leaveModal" tabindex="-1" aria-labelledby="leaveModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h5 class="modal-title h6" id="leaveModalLabel">Set Leave</h5>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-2" id="leaveModalMeta"></p>
+            <div class="mb-2">
+              <select id="leaveType" class="form-select form-select-sm">
+                <option value="Full Day">Full Day</option>
+                <option value="Half Day - AM">Half Day - AM</option>
+                <option value="Half Day - PM">Half Day - PM</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <input id="leaveNote" class="form-control form-control-sm" placeholder="Note (optional)" />
+            </div>
+            <div id="leaveErr" class="text-danger small"></div>
+          </div>
+          <div class="modal-footer py-2 gap-1">
+            <button id="leaveSaveBtn" class="btn btn-primary btn-sm">Save</button>
+            <button id="leaveDeleteBtn" class="btn btn-outline-danger btn-sm d-none">Remove</button>
+            <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+
+      // ── State ────────────────────────────────────────────────────────────
+      const today   = new Date();
+      let curYear   = today.getFullYear();
+      let curMonth  = today.getMonth(); // 0-based
+
+      let employees  = [];  // [{id, name, email}]
+      let leaveMap   = {};  // key: "empId_YYYY-MM-DD" -> leave row
+      let holidayMap = {};  // key: "YYYY-MM-DD" -> {id, name}
+      let allHolidays = []; // full list for the holidays panel
+
+      // modal context
+      let modalEmpId   = null;
+      let modalDate    = null;
+      let modalLeaveId = null;
+
+      // ── Helpers ──────────────────────────────────────────────────────────
+      function ym() {
+        return `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+      }
+      function fmtDate(y, m, d) {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+      function escHtml(s) {
+        return String(s ?? '')
+          .replaceAll('&','&amp;').replaceAll('<','&lt;')
+          .replaceAll('>','&gt;').replaceAll('"','&quot;');
+      }
+
+      const DAY_NAMES   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const MONTH_NAMES = ['January','February','March','April','May','June',
+                           'July','August','September','October','November','December'];
+
+      // ── API ──────────────────────────────────────────────────────────────
+      async function api(method, url, body) {
+        const opts = { method, headers: {} };
+        if (body !== undefined) {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body);
+        }
+        const r = await fetch(url, opts);
+        const d = await r.json().catch(() => ({}));
+        return { ok: r.ok, data: d };
+      }
+
+      // ── Load ─────────────────────────────────────────────────────────────
+      async function loadAll() {
+        await Promise.all([loadEmployees(), loadMonth()]);
+      }
+
+      async function loadEmployees() {
+        const { ok, data } = await api('GET', '/api/leave/employees');
+        if (!ok) return;
+        employees = data.employees || [];
+        renderEmpList();
+        renderCalendar();
+      }
+
+      async function loadMonth() {
+        const [lRes, hRes] = await Promise.all([
+          api('GET', `/api/leave/month/${ym()}`),
+          api('GET', '/api/leave/holidays')
+        ]);
+
+        leaveMap = {};
+        if (lRes.ok) {
+          for (const l of (lRes.data.leaves || [])) {
+            leaveMap[`${l.employeeId}_${l.date}`] = l;
+          }
+        }
+
+        holidayMap  = {};
+        allHolidays = [];
+        if (hRes.ok) {
+          allHolidays = hRes.data.holidays || [];
+          for (const h of allHolidays) {
+            holidayMap[h.date] = h;
+          }
+        }
+
+        renderCalendar();
+        renderHolList();
+      }
+
+      // ── Calendar ─────────────────────────────────────────────────────────
+      function renderCalendar() {
+        $('monthLabel').textContent = `${MONTH_NAMES[curMonth]} ${curYear}`;
+
+        const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+        const todayStr    = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+        // ── Header ──
+        const head = $('calHead');
+        head.innerHTML = '';
+        const headRow = document.createElement('tr');
+
+        const empTh = document.createElement('th');
+        empTh.className   = 'emp-col';
+        empTh.textContent = 'Employee';
+        headRow.appendChild(empTh);
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dow     = new Date(curYear, curMonth, d).getDay();
+          const dateStr = fmtDate(curYear, curMonth + 1, d);
+          const th      = document.createElement('th');
+          th.innerHTML  = `<div>${d}</div><div style="font-size:0.65rem;color:#6e7781">${DAY_NAMES[dow]}</div>`;
+          if (dow === 0 || dow === 6) th.style.background = '#f8f9fa';
+          if (holidayMap[dateStr])    th.style.background = '#fff3cd';
+          headRow.appendChild(th);
+        }
+        head.appendChild(headRow);
+
+        // ── Body ──
+        const body = $('calBody');
+        body.innerHTML = '';
+
+        if (!employees.length) {
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = daysInMonth + 1;
+          td.className   = 'text-muted small text-center py-3';
+          td.textContent = 'No employees yet — add one using the panel on the right.';
+          tr.appendChild(td);
+          body.appendChild(tr);
+          return;
+        }
+
+        for (const emp of employees) {
+          const tr = document.createElement('tr');
+
+          const nameTd       = document.createElement('td');
+          nameTd.className   = 'emp-name';
+          nameTd.title       = emp.name + (emp.email ? ` <${emp.email}>` : '');
+          nameTd.textContent = emp.name;
+          tr.appendChild(nameTd);
+
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dow     = new Date(curYear, curMonth, d).getDay();
+            const dateStr = fmtDate(curYear, curMonth + 1, d);
+            const leave   = leaveMap[`${emp.id}_${dateStr}`];
+            const td      = document.createElement('td');
+
+            if (dow === 0 || dow === 6)  td.classList.add('weekend');
+            if (holidayMap[dateStr])     td.classList.add('holiday');
+            if (dateStr === todayStr)    td.classList.add('today');
+
+            if (leave) {
+              const badge       = document.createElement('span');
+              badge.className   = 'leave-badge ' + leaveClass(leave.leaveType);
+              badge.textContent = leaveLetter(leave.leaveType);
+              badge.title       = leave.leaveType + (leave.note ? ' — ' + leave.note : '');
+              td.appendChild(badge);
+            }
+
+            td.addEventListener('click', () => openLeaveModal(emp, dateStr, leave));
+            tr.appendChild(td);
+          }
+
+          body.appendChild(tr);
+        }
+      }
+
+      function leaveClass(t) {
+        if (t === 'Half Day - AM') return 'leave-am';
+        if (t === 'Half Day - PM') return 'leave-pm';
+        return 'leave-full';
+      }
+      function leaveLetter(t) {
+        if (t === 'Half Day - AM') return 'AM';
+        if (t === 'Half Day - PM') return 'PM';
+        return 'F';
+      }
+
+      // ── Leave modal ──────────────────────────────────────────────────────
+      let bsModal;
+      function getModal() {
+        if (!bsModal) bsModal = new bootstrap.Modal($('leaveModal'));
+        return bsModal;
+      }
+
+      function openLeaveModal(emp, dateStr, existingLeave) {
+        modalEmpId   = emp.id;
+        modalDate    = dateStr;
+        modalLeaveId = existingLeave?.id ?? null;
+
+        $('leaveModalLabel').textContent = existingLeave ? 'Edit Leave' : 'Set Leave';
+        $('leaveModalMeta').textContent  = `${emp.name}  ·  ${dateStr}`;
+        $('leaveType').value             = existingLeave?.leaveType ?? 'Full Day';
+        $('leaveNote').value             = existingLeave?.note ?? '';
+        $('leaveErr').textContent        = '';
+        $('leaveDeleteBtn').classList.toggle('d-none', !existingLeave);
+
+        getModal().show();
+      }
+
+      $('leaveSaveBtn').addEventListener('click', async () => {
+        $('leaveErr').textContent = '';
+        const { ok, data } = await api('POST', '/api/leave/leaves', {
+          employeeId: modalEmpId,
+          date:       modalDate,
+          leaveType:  $('leaveType').value,
+          note:       $('leaveNote').value
+        });
+        if (!ok) {
+          $('leaveErr').textContent = data?.details
+            ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+        leaveMap[`${modalEmpId}_${modalDate}`] = data.leave;
+        getModal().hide();
+        renderCalendar();
+      });
+
+      $('leaveDeleteBtn').addEventListener('click', async () => {
+        if (!modalLeaveId) return;
+        const { ok, data } = await api('DELETE', `/api/leave/leaves/${modalLeaveId}`);
+        if (!ok) { $('leaveErr').textContent = data?.error || 'Delete failed'; return; }
+        delete leaveMap[`${modalEmpId}_${modalDate}`];
+        getModal().hide();
+        renderCalendar();
+      });
+
+      // ── Employees panel ──────────────────────────────────────────────────
+      function renderEmpList() {
+        const host = $('empList');
+        host.innerHTML = '';
+        if (!employees.length) {
+          host.innerHTML = '<div class="text-muted small">No employees yet</div>';
+          return;
+        }
+        for (const e of employees) {
+          const div = document.createElement('div');
+          div.className = 'card mb-2';
+          div.innerHTML = `
+            <div class="card-body py-2 d-flex justify-content-between align-items-center gap-2">
+              <div>
+                <div class="small fw-medium">${escHtml(e.name)}</div>
+                ${e.email ? `<div class="text-muted" style="font-size:0.72rem">${escHtml(e.email)}</div>` : ''}
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn btn-light btn-sm" data-action="edit">Edit</button>
+                <button class="btn btn-outline-danger btn-sm" data-action="del">✕</button>
+              </div>
+            </div>`;
+
+          div.querySelector('[data-action="edit"]').addEventListener('click', () => {
+            $('empName').value  = e.name;
+            $('empEmail').value = e.email ?? '';
+            $('empMsg').textContent = 'Loaded. Click Save to update.';
+            $('empErr').textContent = '';
+          });
+
+          div.querySelector('[data-action="del"]').addEventListener('click', async () => {
+            if (!confirm(`Delete "${e.name}" and all their leave records?`)) return;
+            const { ok, data } = await api('DELETE', `/api/leave/employees/${e.id}`);
+            if (!ok) { $('empErr').textContent = data?.error || 'Delete failed'; return; }
+            await loadEmployees();
+          });
+
+          host.appendChild(div);
+        }
+      }
+
+      $('empSaveBtn').addEventListener('click', async () => {
+        $('empErr').textContent = '';
+        $('empMsg').textContent = 'Saving…';
+        const { ok, data } = await api('POST', '/api/leave/employees', {
+          name:  $('empName').value,
+          email: $('empEmail').value
+        });
+        if (!ok) {
+          $('empMsg').textContent = '';
+          $('empErr').textContent = data?.details
+            ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+        $('empMsg').textContent = 'Saved.';
+        $('empName').value  = '';
+        $('empEmail').value = '';
+        await loadEmployees();
+      });
+
+      $('empClearBtn').addEventListener('click', () => {
+        $('empName').value  = '';
+        $('empEmail').value = '';
+        $('empMsg').textContent = '';
+        $('empErr').textContent = '';
+      });
+
+      // ── Holidays panel ───────────────────────────────────────────────────
+      function renderHolList() {
+        const host = $('holList');
+        host.innerHTML = '';
+        const sorted = [...allHolidays].sort((a, b) => a.date.localeCompare(b.date));
+
+        if (!sorted.length) {
+          host.innerHTML = '<div class="text-muted small">No holidays yet</div>';
+          return;
+        }
+
+        for (const h of sorted) {
+          const div = document.createElement('div');
+          div.className = 'card mb-2';
+          div.innerHTML = `
+            <div class="card-body py-2 d-flex justify-content-between align-items-center gap-2">
+              <div>
+                <div class="small fw-medium">${escHtml(h.name)}</div>
+                <div class="text-muted" style="font-size:0.72rem">${escHtml(h.date)}</div>
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn btn-light btn-sm" data-action="edit">Edit</button>
+                <button class="btn btn-outline-danger btn-sm" data-action="del">✕</button>
+              </div>
+            </div>`;
+
+          div.querySelector('[data-action="edit"]').addEventListener('click', () => {
+            $('holDate').value = h.date;
+            $('holName').value = h.name;
+            $('holMsg').textContent = 'Loaded. Click Save to update.';
+            $('holErr').textContent = '';
+            showTab('holTab');
+          });
+
+          div.querySelector('[data-action="del"]').addEventListener('click', async () => {
+            const { ok, data } = await api('DELETE', `/api/leave/holidays/${h.id}`);
+            if (!ok) { $('holErr').textContent = data?.error || 'Delete failed'; return; }
+            await loadMonth();
+          });
+
+          host.appendChild(div);
+        }
+      }
+
+      $('holSaveBtn').addEventListener('click', async () => {
+        $('holErr').textContent = '';
+        $('holMsg').textContent = 'Saving…';
+        const { ok, data } = await api('POST', '/api/leave/holidays', {
+          date: $('holDate').value,
+          name: $('holName').value
+        });
+        if (!ok) {
+          $('holMsg').textContent = '';
+          $('holErr').textContent = data?.details
+            ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+        $('holMsg').textContent = 'Saved.';
+        $('holDate').value = '';
+        $('holName').value = '';
+        await loadMonth();
+      });
+
+      $('holClearBtn').addEventListener('click', () => {
+        $('holDate').value = '';
+        $('holName').value = '';
+        $('holMsg').textContent = '';
+        $('holErr').textContent = '';
+      });
+
+      // ── Tabs ─────────────────────────────────────────────────────────────
+      function showTab(id) {
+        document.querySelectorAll('#sideTabs .nav-link').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === id);
+        });
+        [$('empTab'), $('holTab')].forEach(panel => {
+          panel.classList.toggle('d-none', panel.id !== id);
+        });
+      }
+
+      document.querySelectorAll('#sideTabs .nav-link').forEach(btn => {
+        btn.addEventListener('click', () => showTab(btn.dataset.tab));
+      });
+
+      // ── Month navigation ─────────────────────────────────────────────────
+      $('prevMonth').addEventListener('click', () => {
+        curMonth--;
+        if (curMonth < 0) { curMonth = 11; curYear--; }
+        loadMonth();
+      });
+      $('nextMonth').addEventListener('click', () => {
+        curMonth++;
+        if (curMonth > 11) { curMonth = 0; curYear++; }
+        loadMonth();
+      });
+      $('todayBtn').addEventListener('click', () => {
+        curYear  = today.getFullYear();
+        curMonth = today.getMonth();
+        loadMonth();
+      });
+
+      // ── Init ─────────────────────────────────────────────────────────────
+      loadAll();
+    </script>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>
