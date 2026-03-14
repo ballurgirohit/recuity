@@ -595,11 +595,11 @@
         for (const r of items) {
           const opt = document.createElement('option');
           opt.value = r.reqId;
-          opt.textContent = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          const label = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          opt.textContent = r.type ? `${label} [${r.type}]` : label;
           sel.appendChild(opt);
         }
 
-        // keep selection if still present
         sel.value = current;
 
         const searchSel = $('searchReqId');
@@ -609,11 +609,11 @@
         for (const r of items) {
           const opt = document.createElement('option');
           opt.value = r.reqId;
-          opt.textContent = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          const label = r.name ? `${r.reqId} — ${r.name}` : r.reqId;
+          opt.textContent = r.type ? `${label} [${r.type}]` : label;
           searchSel.appendChild(opt);
         }
 
-        // keep selection if still present
         searchSel.value = searchCurrent;
       }
 
