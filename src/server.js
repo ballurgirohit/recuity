@@ -59,6 +59,7 @@ const upsertSchema = z.object({
   email: z.string().trim().max(320).optional().or(z.literal('')),
   status: z.enum(allowedStatuses).default('New'),
   requisitionId: z.string().trim().max(100).optional().or(z.literal('')),
+  panelMemberId: z.number({ coerce: true }).int().positive().optional().nullable(),
   onNameConflict: z.enum(['update', 'suffix']).optional(),
   comments: z.string().trim().max(20000).default('')
 }).superRefine((val, ctx) => {
@@ -73,8 +74,8 @@ app.post('/api/notes', (req, res) => {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   }
 
-  const { name, email, status, requisitionId, comments, onNameConflict } = parsed.data;
-  const saved = upsertCandidateNote({ name, email, status, requisitionId, comments, onNameConflict });
+  const { name, email, status, requisitionId, panelMemberId, comments, onNameConflict } = parsed.data;
+  const saved = upsertCandidateNote({ name, email, status, requisitionId, panelMemberId, comments, onNameConflict });
   return res.json({ ok: true, note: saved });
 });
 

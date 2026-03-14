@@ -125,6 +125,11 @@
                     <option value="" selected>Requisition </option>
                   </select>
                 </div>
+                <div class="col-md-4">
+                  <select id="panelMemberSelect" class="form-select" aria-label="Panel member">
+                    <option value="" selected>Panel member</option>
+                  </select>
+                </div>
               </div>
 
               <div class="mt-3">
@@ -275,6 +280,7 @@
         $('email').value = '';
         $('status').value = '';
         $('reqSelect').value = '';
+        $('panelMemberSelect').value = '';
         $('comments').value = '';
         $('saveError').textContent = '';
       }
@@ -287,6 +293,7 @@
         const email = $('email').value;
         const status = $('status').value || 'New';
         const requisitionId = $('reqSelect').value;
+        const panelMemberId = $('panelMemberSelect').value;
         const comments = $('comments').value;
 
         let onNameConflict;
@@ -310,6 +317,7 @@
           email,
           status,
           requisitionId,
+          panelMemberId,
           comments,
           ...(onNameConflict ? { onNameConflict } : {})
         };
@@ -351,6 +359,7 @@
                   <div><strong>${escapeHtml(r.name)}</strong> <span class="text-muted">&lt;${escapeHtml(r.email || '')}&gt;</span></div>
                   <div class="text-muted small">Status: ${escapeHtml(r.status || 'New')}</div>
                   ${r.requisitionId ? `<div class="text-muted small">Req: ${escapeHtml(getReqLabel(r.requisitionId))}</div>` : ''}
+                  ${r.panelMemberName ? `<div class="text-muted small">Panel: ${escapeHtml(r.panelMemberName)}</div>` : ''}
                   <div class="text-muted small">Created: ${r.created_at} | Updated: ${r.updated_at}</div>
                 </div>
                 <div class="d-flex gap-2">
@@ -389,6 +398,7 @@
             $('email').value = r.email || '';
             $('status').value = r.status || '';
             if ($('reqSelect')) $('reqSelect').value = r.requisitionId || '';
+            if ($('panelMemberSelect')) $('panelMemberSelect').value = r.panelMemberId || '';
             $('comments').value = r.comments;
             $('saveError').textContent = '';
             $('saveStatus').textContent = 'Editing loaded note. Click Save to update.';
@@ -765,6 +775,38 @@
         resetPanelForm();
         await loadPanelMembers();
       }
+
+      function populatePanelMemberSelect(items) {
+        const sel = $('panelMemberSelect');
+        const current = sel.value;
+        sel.innerHTML = '<option value="" selected>Panel member</option>';
+
+        for (const m of items) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          sel.appendChild(opt);
+        }
+
+        sel.value = current;
+      }
+
+      async function loadPanelMembersForSelect() {
+        const resp = await fetch('/api/panel-members');
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) return;
+        populatePanelMemberSelect(data.panelMembers || []);
+      }
+
+      // When panel members change (saved/deleted), reload selector too
+      const _loadPanelMembersOriginal = loadPanelMembers;
+      loadPanelMembers = async function () {
+        await _loadPanelMembersOriginal();
+        await loadPanelMembersForSelect();
+      };
+
+      // Initial load
+      loadPanelMembersForSelect();
 
       $('panelSaveBtn').addEventListener('click', savePanelMember);
       $('panelClearBtn').addEventListener('click', resetPanelForm);
