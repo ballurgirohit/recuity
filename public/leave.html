@@ -65,6 +65,7 @@
         <a class="nav-link" href="/todo.html">Todo</a>
         <a class="nav-link" href="/org.html">Org</a>
       </div>
+      <span id="appVersion" class="ms-auto text-muted" style="font-size:0.75rem"></span>
     </nav>
 
     <div class="container-fluid px-3">
@@ -674,6 +675,14 @@
 
       // ── Init ─────────────────────────────────────────────────────────────
       loadAll();
+
+      async function fetchAppVersion() {
+        const r = await fetch('/api/version').catch(() => null);
+        if (!r?.ok) return;
+        const d = await r.json().catch(() => null);
+        if (d?.version) document.getElementById('appVersion').textContent = `v${d.version}`;
+      }
+      fetchAppVersion();
     </script>
 
     <script

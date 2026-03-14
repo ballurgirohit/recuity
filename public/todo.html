@@ -244,6 +244,7 @@
       <a href="/leave.html">Leave</a>
       <a href="/todo.html" class="active">Todo</a>
       <a href="/org.html">Org</a>
+      <span id="appVersion" style="margin-left:auto;font-size:0.75rem;color:var(--td-muted)"></span>
     </nav>
 
     <div class="td-layout">
@@ -752,6 +753,14 @@
 
       // ── Init ─────────────────────────────────────────────────────────────
       loadAll();
+
+      async function fetchAppVersion() {
+        const r = await fetch('/api/version').catch(() => null);
+        if (!r?.ok) return;
+        const d = await r.json().catch(() => null);
+        if (d?.version) $('appVersion').textContent = `v${d.version}`;
+      }
+      fetchAppVersion();
     </script>
   </body>
 </html>

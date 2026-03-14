@@ -56,6 +56,8 @@ const {
   deleteOrgNode
 } = require('./org-storage');
 
+const { version } = require('../package.json');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -560,6 +562,10 @@ app.delete('/api/org/nodes/:id', (req, res) => {
   const result = deleteOrgNode(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   res.json({ ok: true, deleted: result.deleted });
+});
+
+app.get('/api/version', (_req, res) => {
+  res.json({ ok: true, version });
 });
 
 app.listen(PORT, () => {

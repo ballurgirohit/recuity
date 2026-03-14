@@ -90,6 +90,7 @@
         <a class="nav-link" href="/todo.html">Todo</a>
         <a class="nav-link" href="/org.html">Org</a>
       </div>
+      <span id="appVersion" class="ms-auto text-muted" style="font-size:0.75rem"></span>
     </nav>
 
     <div class="container py-4">
@@ -820,6 +821,17 @@
       $('panelClearBtn').addEventListener('click', resetPanelForm);
 
       loadPanels();
+
+      // Fetch and display app version
+      async function fetchAppVersion() {
+        const resp = await fetch('/api/version');
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.version) {
+          $('appVersion').textContent = `v${data.version}`;
+        }
+      }
+
+      fetchAppVersion();
     </script>
 
     <!-- Bootstrap JS (optional; used for some components) -->

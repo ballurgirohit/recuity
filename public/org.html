@@ -157,6 +157,7 @@
         <a class="nav-link" href="/todo.html">Todo</a>
         <a class="nav-link active fw-semibold" href="/org.html">Org</a>
       </div>
+      <span id="appVersion" class="ms-auto text-muted" style="font-size:0.75rem"></span>
     </nav>
 
     <div class="container-fluid py-3 px-4">
@@ -487,6 +488,16 @@
       });
 
       fetchNodes();
+
+      async function fetchAppVersion() {
+        const resp = await fetch('/api/version');
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.version) {
+          $('appVersion').textContent = `v${data.version}`;
+        }
+      }
+
+      fetchAppVersion();
     </script>
   </body>
 </html>
