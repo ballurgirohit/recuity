@@ -49,12 +49,20 @@ const {
   deleteTodo
 } = require('./todo-storage');
 
+const {
+  initOrgDb,
+  listOrgNodes,
+  upsertOrgNode,
+  deleteOrgNode
+} = require('./org-storage');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 initDb();
 initLeaveDb();
 initTodoDb();
+initOrgDb();
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -511,6 +519,45 @@ app.delete('/api/todo/todos/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteTodo(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// ── Org Chart API ─────────────────────────────────────────────────────────────
+
+const orgNodeSchema = z.object({
+  id:         z.number({ coerce: true }).int().positive().optional().nullable(),
+  name:       z.string().trim().min(1, 'Name is required').max(200),
+  title:      z.string().trim().max(200).default(''),
+  department: z.string().trim().max(200).default(''),
+  email:      z.string().trim().max(320).default(''),
+  parent_id:  z.number({ coerce: true }).int().positive().optional().nullable(),
+  sort_order: z.number({ coerce: true }).int().default(0)
+}).superRefine((val, ctx) => {
+  if (val.email && !z.string().email().safeParse(val.email).success) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Email must be valid if provided' });
+  }
+});
+
+app.get('/api/org/nodes', (_req, res) => {
+  res.json({ ok: true, nodes: listOrgNodes() });
+});
+
+app.post('/api/org/nodes', (req, res) => {
+  const parsed = orgNodeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  try {
+    const node = upsertOrgNode(parsed.data);
+    res.json({ ok: true, node });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/org/nodes/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteOrgNode(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   res.json({ ok: true, deleted: result.deleted });
 });
