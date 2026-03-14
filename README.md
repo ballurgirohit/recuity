@@ -51,8 +51,16 @@ To stop the server: close the Terminal window or press **Ctrl+C**.
 ### Windows
 `node_modules/` is OS-specific (native SQLite bindings). The macOS `node_modules/` **cannot** be reused on Windows.
 
+If a `node_modules/` folder is already present (e.g. shipped from macOS), delete it first and install fresh:
+
+```cmd
+rmdir /s /q node_modules
+npm install
+```
+
+Then to start the app:
+
 1. Double-click **`start.bat`**.
-   - It will delete any existing `node_modules/` and run `npm install` automatically.
 2. Open <http://localhost:3000>.
 
 To stop the server: close the Command Prompt window or press **Ctrl+C**.
