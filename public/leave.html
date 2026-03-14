@@ -112,6 +112,9 @@
             <li class="nav-item">
               <button class="nav-link" data-tab="holTab">Holidays</button>
             </li>
+            <li class="nav-item">
+              <button class="nav-link" data-tab="ioTab">Export / Import</button>
+            </li>
           </ul>
 
           <!-- Employees panel -->
@@ -155,6 +158,36 @@
 
               <h3 class="h6 mt-4 mb-2">All Holidays</h3>
               <div id="holList"></div>
+            </div>
+          </section>
+
+          <!-- Export / Import panel -->
+          <section class="card shadow-sm border-top-0 d-none" id="ioTab">
+            <div class="card-body">
+
+              <h3 class="h6 mb-3">Export to Excel</h3>
+              <div class="mb-2">
+                <label class="form-label small mb-1">From</label>
+                <input id="exportFrom" class="form-control form-control-sm" type="date" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label small mb-1">To</label>
+                <input id="exportTo" class="form-control form-control-sm" type="date" />
+              </div>
+              <button id="exportBtn" class="btn btn-success btn-sm">&#8595; Download .xlsx</button>
+              <div id="exportErr" class="text-danger small mt-1"></div>
+
+              <hr class="my-3" />
+
+              <h3 class="h6 mb-3">Import from Excel</h3>
+              <p class="text-muted small">Upload a .xlsx file with a <strong>Leaves</strong> sheet whose columns match the export format (Employee, Email, Date, Leave Type, Note).</p>
+              <div class="mb-2">
+                <input id="importFile" class="form-control form-control-sm" type="file" accept=".xlsx" />
+              </div>
+              <button id="importBtn" class="btn btn-primary btn-sm">&#8593; Import</button>
+              <div id="importMsg" class="text-muted small mt-1"></div>
+              <div id="importErr" class="text-danger small"></div>
+
             </div>
           </section>
 
@@ -560,7 +593,7 @@
         document.querySelectorAll('#sideTabs .nav-link').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.tab === id);
         });
-        [$('empTab'), $('holTab')].forEach(panel => {
+        [$('empTab'), $('holTab'), $('ioTab')].forEach(panel => {
           panel.classList.toggle('d-none', panel.id !== id);
         });
       }
@@ -584,6 +617,57 @@
         curYear  = today.getFullYear();
         curMonth = today.getMonth();
         loadMonth();
+      });
+
+      // ── Export / Import ──────────────────────────────────────────────────
+      $('exportBtn').addEventListener('click', () => {
+        const from = $('exportFrom').value;
+        const to   = $('exportTo').value;
+        $('exportErr').textContent = '';
+        if (!from || !to) {
+          $('exportErr').textContent = 'Please select both From and To dates.';
+          return;
+        }
+        if (from > to) {
+          $('exportErr').textContent = '"From" must not be after "To".';
+          return;
+        }
+        window.location.href = `/api/leave/export?from=${from}&to=${to}`;
+      });
+
+      $('importBtn').addEventListener('click', async () => {
+        $('importErr').textContent = '';
+        $('importMsg').textContent = '';
+        const file = $('importFile').files[0];
+        if (!file) {
+          $('importErr').textContent = 'Please choose a .xlsx file first.';
+          return;
+        }
+        $('importMsg').textContent = 'Uploading…';
+        $('importBtn').disabled = true;
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const r = await fetch('/api/leave/import', { method: 'POST', body: fd });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            $('importErr').textContent = d?.error || 'Import failed.';
+            $('importMsg').textContent = '';
+            return;
+          }
+          const errLines = (d.errors || []).join('\n');
+          $('importMsg').textContent =
+            `✓ Imported ${d.imported} row(s), skipped ${d.skipped} empty row(s).` +
+            (errLines ? '' : ' All rows OK.');
+          if (errLines) {
+            $('importErr').textContent = 'Warnings:\n' + errLines;
+          }
+          $('importFile').value = '';
+          // Refresh the calendar and employee list
+          await loadAll();
+        } finally {
+          $('importBtn').disabled = false;
+        }
       });
 
       // ── Init ─────────────────────────────────────────────────────────────

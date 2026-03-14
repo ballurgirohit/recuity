@@ -1,6 +1,8 @@
 const path = require('path');
 const express = require('express');
 const { z } = require('zod');
+const ExcelJS = require('exceljs');
+const multer  = require('multer');
 const {
   initDb,
   upsertCandidateNote,
@@ -24,6 +26,8 @@ const {
   upsertEmployee,
   deleteEmployee,
   getLeavesForMonth,
+  getLeavesForRange,
+  getHolidaysForRange,
   upsertLeave,
   deleteLeave,
   listAllHolidays,
@@ -201,6 +205,22 @@ const panelSchema = z.object({
 });
 
 const yearMonthRe = /^\d{4}-\d{2}$/;
+const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Convert an ExcelJS cell value to a YYYY-MM-DD string, or '' on failure. */
+function cellToDateStr(value) {
+  if (!value) return '';
+  if (value instanceof Date) {
+    // Use UTC parts to avoid timezone shifts
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(value).trim();
+}
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Employees
 app.get('/api/leave/employees', (_req, res) => {
@@ -284,6 +304,123 @@ app.delete('/api/panels/:id', (req, res) => {
   const result = deletePanel(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   return res.json({ ok: true, deleted: result.deleted });
+});
+
+// ── Leave export (GET /api/leave/export?from=YYYY-MM-DD&to=YYYY-MM-DD) ────────
+app.get('/api/leave/export', async (req, res) => {
+  const from = String(req.query.from ?? '').trim();
+  const to   = String(req.query.to   ?? '').trim();
+
+  if (!dateRe.test(from) || !dateRe.test(to) || from > to) {
+    return res.status(400).json({ error: 'Provide valid from and to dates (YYYY-MM-DD, from <= to)' });
+  }
+
+  const leaves   = getLeavesForRange(from, to);
+  const holidays = getHolidaysForRange(from, to);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Recuity';
+
+  // ── Sheet 1: Leaves ──
+  const lws = wb.addWorksheet('Leaves');
+  lws.columns = [
+    { header: 'Employee',   key: 'employeeName', width: 24 },
+    { header: 'Email',      key: 'employeeEmail', width: 28 },
+    { header: 'Date',       key: 'date',         width: 14 },
+    { header: 'Leave Type', key: 'leaveType',    width: 18 },
+    { header: 'Note',       key: 'note',         width: 40 },
+  ];
+
+  // Style header row
+  lws.getRow(1).eachCell(cell => {
+    cell.font = { bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD0D7DE' } };
+  });
+
+  for (const l of leaves) {
+    lws.addRow({
+      employeeName:  l.employeeName,
+      employeeEmail: l.employeeEmail ?? '',
+      date:          l.date,
+      leaveType:     l.leaveType,
+      note:          l.note ?? '',
+    });
+  }
+
+  // ── Sheet 2: Holidays ──
+  const hws = wb.addWorksheet('Holidays');
+  hws.columns = [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Name', key: 'name', width: 36 },
+  ];
+  hws.getRow(1).eachCell(cell => {
+    cell.font = { bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD0D7DE' } };
+  });
+  for (const h of holidays) {
+    hws.addRow({ date: h.date, name: h.name });
+  }
+
+  const filename = `leave_${from}_to_${to}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  await wb.xlsx.write(res);
+  res.end();
+});
+
+// ── Leave import (POST /api/leave/import) ────────────────────────────────────
+app.post('/api/leave/import', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(req.file.buffer);
+  } catch {
+    return res.status(400).json({ error: 'Could not parse Excel file' });
+  }
+
+  const lws = wb.getWorksheet('Leaves');
+  if (!lws) return res.status(400).json({ error: 'Sheet "Leaves" not found in workbook' });
+
+  // Build employee lookup by name (case-insensitive), auto-create if missing
+  const empRows = listEmployees();
+  const empByName = new Map(empRows.map(e => [e.name.toLowerCase(), e]));
+
+  const errors  = [];
+  let imported  = 0;
+  let skipped   = 0;
+
+  lws.eachRow((row, rowNum) => {
+    if (rowNum === 1) return; // skip header
+
+    const empName   = String(row.getCell(1).value ?? '').trim();
+    const empEmail  = String(row.getCell(2).value ?? '').trim();
+    const date      = cellToDateStr(row.getCell(3).value);
+    const leaveType = String(row.getCell(4).value ?? 'Full Day').trim();
+    const note      = String(row.getCell(5).value ?? '').trim();
+
+    if (!empName || !date) { skipped++; return; }
+    if (!dateRe.test(date)) {
+      errors.push(`Row ${rowNum}: invalid date "${date}"`);
+      return;
+    }
+    if (!['Full Day', 'Half Day - AM', 'Half Day - PM'].includes(leaveType)) {
+      errors.push(`Row ${rowNum}: invalid leave type "${leaveType}"`);
+      return;
+    }
+
+    // Find or create employee
+    let emp = empByName.get(empName.toLowerCase());
+    if (!emp) {
+      emp = upsertEmployee({ name: empName, email: empEmail });
+      empByName.set(empName.toLowerCase(), emp);
+    }
+
+    upsertLeave({ employeeId: emp.id, date, leaveType, note });
+    imported++;
+  });
+
+  res.json({ ok: true, imported, skipped, errors });
 });
 
 app.listen(PORT, () => {

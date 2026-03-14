@@ -106,6 +106,27 @@ function getLeavesForMonth(yearMonth) {
   `).all({ yearMonth });
 }
 
+function getLeavesForRange(from, to) {
+  return db.prepare(`
+    SELECT l.id, l.employee_id AS employeeId, e.name AS employeeName,
+           e.email AS employeeEmail,
+           l.date, l.leave_type AS leaveType, l.note,
+           l.created_at, l.updated_at
+    FROM lm_leaves l
+    JOIN lm_employees e ON e.id = l.employee_id
+    WHERE l.date >= @from AND l.date <= @to
+    ORDER BY l.date, lower(e.name)
+  `).all({ from, to });
+}
+
+function getHolidaysForRange(from, to) {
+  return db.prepare(`
+    SELECT id, date, name FROM lm_holidays
+    WHERE date >= @from AND date <= @to
+    ORDER BY date
+  `).all({ from, to });
+}
+
 function upsertLeave({ employeeId, date, leaveType, note }) {
   const now = nowIso();
   return db.prepare(`
@@ -172,6 +193,8 @@ module.exports = {
   upsertEmployee,
   deleteEmployee,
   getLeavesForMonth,
+  getLeavesForRange,
+  getHolidaysForRange,
   upsertLeave,
   deleteLeave,
   getHolidaysForMonth,
