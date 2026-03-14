@@ -126,8 +126,8 @@
                   </select>
                 </div>
                 <div class="col-md-4">
-                  <select id="panelMemberSelect" class="form-select" aria-label="Panel member">
-                    <option value="" selected>Panel member</option>
+                  <select id="panelSelect" class="form-select" aria-label="Panel">
+                    <option value="" selected>Panel</option>
                   </select>
                 </div>
               </div>
@@ -199,7 +199,7 @@
                   <button class="nav-link active" id="tab-req" data-bs-toggle="tab" data-bs-target="#pane-req" type="button" role="tab">Requisitions</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link" id="tab-panel" data-bs-toggle="tab" data-bs-target="#pane-panel" type="button" role="tab">Panel Members</button>
+                  <button class="nav-link" id="tab-panel" data-bs-toggle="tab" data-bs-target="#pane-panel" type="button" role="tab">Panel</button>
                 </li>
               </ul>
             </div>
@@ -235,7 +235,7 @@
                 <div id="reqList" class="mt-2"></div>
               </div>
 
-              <!-- Panel Members tab -->
+              <!-- Panel tab -->
               <div class="tab-pane fade" id="pane-panel" role="tabpanel">
                 <div class="mb-2">
                   <input id="panelName" class="form-control" placeholder="Name" aria-label="Name" />
@@ -252,7 +252,7 @@
                 </div>
                 <div id="panelStatusMsg" class="text-muted small mt-2"></div>
                 <div id="panelError" class="text-danger small"></div>
-                <h3 class="h6 mt-4">All panel members</h3>
+                <h3 class="h6 mt-4">All panel</h3>
                 <div id="panelList" class="mt-2"></div>
               </div>
 
@@ -280,7 +280,7 @@
         $('email').value = '';
         $('status').value = '';
         $('reqSelect').value = '';
-        $('panelMemberSelect').value = '';
+        $('panelSelect').value = '';
         $('comments').value = '';
         $('saveError').textContent = '';
       }
@@ -293,7 +293,7 @@
         const email = $('email').value;
         const status = $('status').value || 'New';
         const requisitionId = $('reqSelect').value;
-        const panelMemberId = $('panelMemberSelect').value;
+        const panelId = $('panelSelect').value;
         const comments = $('comments').value;
 
         let onNameConflict;
@@ -317,7 +317,7 @@
           email,
           status,
           requisitionId,
-          panelMemberId,
+          panelId,
           comments,
           ...(onNameConflict ? { onNameConflict } : {})
         };
@@ -359,7 +359,6 @@
                   <div><strong>${escapeHtml(r.name)}</strong> <span class="text-muted">&lt;${escapeHtml(r.email || '')}&gt;</span></div>
                   <div class="text-muted small">Status: ${escapeHtml(r.status || 'New')}</div>
                   ${r.requisitionId ? `<div class="text-muted small">Req: ${escapeHtml(getReqLabel(r.requisitionId))}</div>` : ''}
-                  ${r.panelMemberName ? `<div class="text-muted small">Panel: ${escapeHtml(r.panelMemberName)}</div>` : ''}
                   <div class="text-muted small">Created: ${r.created_at} | Updated: ${r.updated_at}</div>
                 </div>
                 <div class="d-flex gap-2">
@@ -398,7 +397,7 @@
             $('email').value = r.email || '';
             $('status').value = r.status || '';
             if ($('reqSelect')) $('reqSelect').value = r.requisitionId || '';
-            if ($('panelMemberSelect')) $('panelMemberSelect').value = r.panelMemberId || '';
+            if ($('panelSelect')) $('panelSelect').value = r.panelId || '';
             $('comments').value = r.comments;
             $('saveError').textContent = '';
             $('saveStatus').textContent = 'Editing loaded note. Click Save to update.';
@@ -678,7 +677,7 @@
       // Load requisitions at startup
       loadRequisitions();
 
-      // ── Panel Members ──────────────────────────────────────────────────────
+      // ── Panel ──────────────────────────────────────────────────────
 
       function resetPanelForm() {
         $('panelName').value = '';
@@ -688,12 +687,12 @@
         $('panelStatusMsg').textContent = '';
       }
 
-      function renderPanelMembers(items) {
+      function renderPanels(items) {
         const host = $('panelList');
         host.innerHTML = '';
 
         if (!items.length) {
-          host.innerHTML = '<div class="text-muted small">No panel members</div>';
+          host.innerHTML = '<div class="text-muted small">No panel</div>';
           return;
         }
 
@@ -725,7 +724,7 @@
           });
 
           div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-            const resp = await fetch(`/api/panel-members/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+            const resp = await fetch(`/api/panels/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) {
               $('panelError').textContent = data?.error || 'Delete failed';
@@ -738,17 +737,17 @@
         }
       }
 
-      async function loadPanelMembers() {
-        const resp = await fetch('/api/panel-members');
+      async function loadPanels() {
+        const resp = await fetch('/api/panels');
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
-          $('panelList').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Failed to load panel members')}</div>`;
+          $('panelList').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Failed to load panel')}</div>`;
           return;
         }
-        renderPanelMembers(data.panelMembers || []);
+        renderPanels(data.panels || []);
       }
 
-      async function savePanelMember() {
+      async function savePanel() {
         $('panelError').textContent = '';
         $('panelStatusMsg').textContent = 'Saving...';
 
@@ -758,7 +757,7 @@
           department: $('panelDepartment').value
         };
 
-        const resp = await fetch('/api/panel-members', {
+        const resp = await fetch('/api/panels', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -773,13 +772,13 @@
 
         $('panelStatusMsg').textContent = `Saved.`;
         resetPanelForm();
-        await loadPanelMembers();
+        await loadPanels();
       }
 
-      function populatePanelMemberSelect(items) {
-        const sel = $('panelMemberSelect');
+      function populatePanelSelect(items) {
+        const sel = $('panelSelect');
         const current = sel.value;
-        sel.innerHTML = '<option value="" selected>Panel member</option>';
+        sel.innerHTML = '<option value="" selected>Panel</option>';
 
         for (const m of items) {
           const opt = document.createElement('option');
@@ -791,27 +790,27 @@
         sel.value = current;
       }
 
-      async function loadPanelMembersForSelect() {
-        const resp = await fetch('/api/panel-members');
+      async function loadPanelsForSelect() {
+        const resp = await fetch('/api/panels');
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) return;
-        populatePanelMemberSelect(data.panelMembers || []);
+        populatePanelSelect(data.panels || []);
       }
 
-      // When panel members change (saved/deleted), reload selector too
-      const _loadPanelMembersOriginal = loadPanelMembers;
-      loadPanelMembers = async function () {
-        await _loadPanelMembersOriginal();
-        await loadPanelMembersForSelect();
+      // When panel changes (saved/deleted), reload selector too
+      const _loadPanelsOriginal = loadPanels;
+      loadPanels = async function () {
+        await _loadPanelsOriginal();
+        await loadPanelsForSelect();
       };
 
       // Initial load
-      loadPanelMembersForSelect();
+      loadPanelsForSelect();
 
-      $('panelSaveBtn').addEventListener('click', savePanelMember);
+      $('panelSaveBtn').addEventListener('click', savePanel);
       $('panelClearBtn').addEventListener('click', resetPanelForm);
 
-      loadPanelMembers();
+      loadPanels();
     </script>
 
     <!-- Bootstrap JS (optional; used for some components) -->

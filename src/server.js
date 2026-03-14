@@ -13,9 +13,9 @@ const {
   deleteRequisition,
   getNoEmailNoteByName,
   getNextAvailableNoEmailName,
-  upsertPanelMember,
-  listPanelMembers,
-  deletePanelMember
+  upsertPanel,
+  listPanels,
+  deletePanel
 } = require('./storage');
 
 const {
@@ -59,7 +59,7 @@ const upsertSchema = z.object({
   email: z.string().trim().max(320).optional().or(z.literal('')),
   status: z.enum(allowedStatuses).default('New'),
   requisitionId: z.string().trim().max(100).optional().or(z.literal('')),
-  panelMemberId: z.number({ coerce: true }).int().positive().optional().nullable(),
+  panelId: z.number({ coerce: true }).int().positive().optional().nullable(),
   onNameConflict: z.enum(['update', 'suffix']).optional(),
   comments: z.string().trim().max(20000).default('')
 }).superRefine((val, ctx) => {
@@ -74,8 +74,8 @@ app.post('/api/notes', (req, res) => {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   }
 
-  const { name, email, status, requisitionId, panelMemberId, comments, onNameConflict } = parsed.data;
-  const saved = upsertCandidateNote({ name, email, status, requisitionId, panelMemberId, comments, onNameConflict });
+  const { name, email, status, requisitionId, panelId, comments, onNameConflict } = parsed.data;
+  const saved = upsertCandidateNote({ name, email, status, requisitionId, panelId, comments, onNameConflict });
   return res.json({ ok: true, note: saved });
 });
 
@@ -189,7 +189,7 @@ const holidaySchema = z.object({
   name: z.string().trim().min(1, 'Holiday name is required').max(200)
 });
 
-const panelMemberSchema = z.object({
+const panelSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
   email: z.string().trim().max(320).optional().or(z.literal('')),
   department: z.string().trim().max(200).default('')
@@ -263,24 +263,24 @@ app.delete('/api/leave/holidays/:id', (req, res) => {
   res.json({ ok: true, deleted: result.deleted });
 });
 
-// Panel Members
-app.get('/api/panel-members', (_req, res) => {
-  res.json({ ok: true, panelMembers: listPanelMembers() });
+// Panel
+app.get('/api/panels', (_req, res) => {
+  res.json({ ok: true, panels: listPanels() });
 });
 
-app.post('/api/panel-members', (req, res) => {
-  const parsed = panelMemberSchema.safeParse(req.body);
+app.post('/api/panels', (req, res) => {
+  const parsed = panelSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   }
-  const saved = upsertPanelMember(parsed.data);
-  return res.json({ ok: true, panelMember: saved });
+  const saved = upsertPanel(parsed.data);
+  return res.json({ ok: true, panel: saved });
 });
 
-app.delete('/api/panel-members/:id', (req, res) => {
+app.delete('/api/panels/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
-  const result = deletePanelMember(id);
+  const result = deletePanel(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   return res.json({ ok: true, deleted: result.deleted });
 });
