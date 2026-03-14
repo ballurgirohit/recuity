@@ -235,6 +235,22 @@ function initDb() {
     SELECT id, name, email, status, requisition_id, comments
     FROM candidate_notes;
   `);
+
+  // Panel members table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS panel_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT,
+      department TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_panel_members_email
+      ON panel_members(lower(email))
+      WHERE email IS NOT NULL AND email <> '';
+  `);
 }
 
 function createCandidateNote({ name, email, status, requisitionId, comments }) {
@@ -523,6 +539,34 @@ function deleteRequisition(reqId) {
   return { deleted: info.changes };
 }
 
+function upsertPanelMember({ name, email, department }) {
+  const now = nowIso();
+  const normalizedEmail = String(email ?? '').trim();
+  const stmt = db.prepare(`
+    INSERT INTO panel_members (name, email, department, created_at, updated_at)
+    VALUES (@name, NULLIF(@email, ''), @department, @now, @now)
+    ON CONFLICT(lower(email)) WHERE email IS NOT NULL AND email <> '' DO UPDATE SET
+      name = excluded.name,
+      department = excluded.department,
+      updated_at = excluded.updated_at
+    RETURNING id, name, email, department, created_at, updated_at;
+  `);
+  return stmt.get({ name, email: normalizedEmail, department: department ?? '', now });
+}
+
+function listPanelMembers() {
+  return db.prepare(`
+    SELECT id, name, email, department, created_at, updated_at
+    FROM panel_members
+    ORDER BY name ASC;
+  `).all();
+}
+
+function deletePanelMember(id) {
+  const info = db.prepare(`DELETE FROM panel_members WHERE id = @id;`).run({ id: Number(id) });
+  return { deleted: info.changes };
+}
+
 module.exports = {
   initDb,
   upsertCandidateNote,
@@ -535,5 +579,8 @@ module.exports = {
   deleteRequisition,
   // exported for UI conflict check
   getNoEmailNoteByName,
-  getNextAvailableNoEmailName
+  getNextAvailableNoEmailName,
+  upsertPanelMember,
+  listPanelMembers,
+  deletePanelMember
 };

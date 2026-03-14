@@ -188,42 +188,69 @@
 
         <div class="col-lg-4">
           <section class="card shadow-sm">
-            <div class="card-body">
-              <h2 class="h5 mb-3"></h2>
+            <div class="card-header p-0 border-bottom-0">
+              <ul class="nav nav-tabs card-header-tabs px-3 pt-2" id="rightPanelTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="tab-req" data-bs-toggle="tab" data-bs-target="#pane-req" type="button" role="tab">Requisitions</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tab-panel" data-bs-toggle="tab" data-bs-target="#pane-panel" type="button" role="tab">Panel Members</button>
+                </li>
+              </ul>
+            </div>
+            <div class="card-body tab-content">
 
-              <div class="mb-2">
-                <input id="reqId" class="form-control" placeholder="Requisition id" aria-label="Requisition id" />
+              <!-- Requisitions tab -->
+              <div class="tab-pane fade show active" id="pane-req" role="tabpanel">
+                <div class="mb-2">
+                  <input id="reqId" class="form-control" placeholder="Requisition id" aria-label="Requisition id" />
+                </div>
+                <div class="mb-2">
+                  <input id="reqName" class="form-control" placeholder="Requisition name" aria-label="Requisition name" />
+                </div>
+                <div class="mb-2">
+                  <select id="reqType" class="form-select" aria-label="Type">
+                    <option value="FTE" selected>FTE</option>
+                    <option value="FTC">FTC</option>
+                  </select>
+                </div>
+                <div class="mb-2">
+                  <input id="reqStatus" class="form-control" placeholder="Status" aria-label="Status" />
+                </div>
+                <div class="mb-2">
+                  <input id="reqLink" class="form-control" placeholder="Link" aria-label="Link" />
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                  <button id="reqSaveBtn" class="btn btn-primary btn-sm">Save</button>
+                  <button id="reqClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+                </div>
+                <div id="reqStatusMsg" class="text-muted small mt-2"></div>
+                <div id="reqError" class="text-danger small"></div>
+                <h3 class="h6 mt-4">All requisitions</h3>
+                <div id="reqList" class="mt-2"></div>
               </div>
 
-              <div class="mb-2">
-                <input id="reqName" class="form-control" placeholder="Requisition name" aria-label="Requisition name" />
+              <!-- Panel Members tab -->
+              <div class="tab-pane fade" id="pane-panel" role="tabpanel">
+                <div class="mb-2">
+                  <input id="panelName" class="form-control" placeholder="Name" aria-label="Name" />
+                </div>
+                <div class="mb-2">
+                  <input id="panelEmail" class="form-control" type="email" placeholder="Email (optional)" aria-label="Email" />
+                </div>
+                <div class="mb-2">
+                  <input id="panelDepartment" class="form-control" placeholder="Department (optional)" aria-label="Department" />
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                  <button id="panelSaveBtn" class="btn btn-primary btn-sm">Save</button>
+                  <button id="panelClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
+                </div>
+                <div id="panelStatusMsg" class="text-muted small mt-2"></div>
+                <div id="panelError" class="text-danger small"></div>
+                <h3 class="h6 mt-4">All panel members</h3>
+                <div id="panelList" class="mt-2"></div>
               </div>
 
-              <div class="mb-2">
-                <select id="reqType" class="form-select" aria-label="Type">
-                  <option value="FTE" selected>FTE</option>
-                  <option value="FTC">FTC</option>
-                </select>
-              </div>
-
-              <div class="mb-2">
-                <input id="reqStatus" class="form-control" placeholder="Status" aria-label="Status" />
-              </div>
-
-              <div class="mb-2">
-                <input id="reqLink" class="form-control" placeholder="Link" aria-label="Link" />
-              </div>
-
-              <div class="d-flex gap-2 mt-2">
-                <button id="reqSaveBtn" class="btn btn-primary btn-sm">Save</button>
-                <button id="reqClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
-              </div>
-
-              <div id="reqStatusMsg" class="text-muted small mt-2"></div>
-              <div id="reqError" class="text-danger small"></div>
-
-              <h3 class="h6 mt-4">All requisitions</h3>
-              <div id="reqList" class="mt-2"></div>
             </div>
           </section>
         </div>
@@ -640,6 +667,109 @@
 
       // Load requisitions at startup
       loadRequisitions();
+
+      // ── Panel Members ──────────────────────────────────────────────────────
+
+      function resetPanelForm() {
+        $('panelName').value = '';
+        $('panelEmail').value = '';
+        $('panelDepartment').value = '';
+        $('panelError').textContent = '';
+        $('panelStatusMsg').textContent = '';
+      }
+
+      function renderPanelMembers(items) {
+        const host = $('panelList');
+        host.innerHTML = '';
+
+        if (!items.length) {
+          host.innerHTML = '<div class="text-muted small">No panel members</div>';
+          return;
+        }
+
+        for (const m of items) {
+          const div = document.createElement('div');
+          div.className = 'card mb-2';
+          div.innerHTML = `
+            <div class="card-body py-2">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div><strong>${escapeHtml(m.name)}</strong></div>
+                  ${m.email ? `<div class="text-muted small">${escapeHtml(m.email)}</div>` : ''}
+                  ${m.department ? `<div class="text-muted small">${escapeHtml(m.department)}</div>` : ''}
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-light btn-sm" type="button" data-action="edit">Edit</button>
+                  <button class="btn btn-outline-danger btn-sm" type="button" data-action="delete">Delete</button>
+                </div>
+              </div>
+            </div>
+          `;
+
+          div.querySelector('[data-action="edit"]').addEventListener('click', () => {
+            $('panelName').value = m.name;
+            $('panelEmail').value = m.email || '';
+            $('panelDepartment').value = m.department || '';
+            $('panelError').textContent = '';
+            $('panelStatusMsg').textContent = 'Loaded. Click Save to update.';
+          });
+
+          div.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+            const resp = await fetch(`/api/panel-members/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              $('panelError').textContent = data?.error || 'Delete failed';
+              return;
+            }
+            div.remove();
+          });
+
+          host.appendChild(div);
+        }
+      }
+
+      async function loadPanelMembers() {
+        const resp = await fetch('/api/panel-members');
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          $('panelList').innerHTML = `<div class="text-danger small">${escapeHtml(data?.error || 'Failed to load panel members')}</div>`;
+          return;
+        }
+        renderPanelMembers(data.panelMembers || []);
+      }
+
+      async function savePanelMember() {
+        $('panelError').textContent = '';
+        $('panelStatusMsg').textContent = 'Saving...';
+
+        const payload = {
+          name: $('panelName').value,
+          email: $('panelEmail').value,
+          department: $('panelDepartment').value
+        };
+
+        const resp = await fetch('/api/panel-members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          $('panelStatusMsg').textContent = '';
+          $('panelError').textContent = data?.details ? JSON.stringify(data.details) : (data?.error || 'Save failed');
+          return;
+        }
+
+        $('panelStatusMsg').textContent = `Saved.`;
+        resetPanelForm();
+        await loadPanelMembers();
+      }
+
+      $('panelSaveBtn').addEventListener('click', savePanelMember);
+      $('panelClearBtn').addEventListener('click', resetPanelForm);
+
+      loadPanelMembers();
     </script>
 
     <!-- Bootstrap JS (optional; used for some components) -->

@@ -12,7 +12,10 @@ const {
   listRequisitions,
   deleteRequisition,
   getNoEmailNoteByName,
-  getNextAvailableNoEmailName
+  getNextAvailableNoEmailName,
+  upsertPanelMember,
+  listPanelMembers,
+  deletePanelMember
 } = require('./storage');
 
 const {
@@ -185,6 +188,16 @@ const holidaySchema = z.object({
   name: z.string().trim().min(1, 'Holiday name is required').max(200)
 });
 
+const panelMemberSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(200),
+  email: z.string().trim().max(320).optional().or(z.literal('')),
+  department: z.string().trim().max(200).default('')
+}).superRefine((val, ctx) => {
+  if (val.email && !z.string().email().safeParse(val.email).success) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Email must be valid if provided' });
+  }
+});
+
 const yearMonthRe = /^\d{4}-\d{2}$/;
 
 // Employees
@@ -247,6 +260,28 @@ app.delete('/api/leave/holidays/:id', (req, res) => {
   const result = deleteHoliday(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   res.json({ ok: true, deleted: result.deleted });
+});
+
+// Panel Members
+app.get('/api/panel-members', (_req, res) => {
+  res.json({ ok: true, panelMembers: listPanelMembers() });
+});
+
+app.post('/api/panel-members', (req, res) => {
+  const parsed = panelMemberSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  }
+  const saved = upsertPanelMember(parsed.data);
+  return res.json({ ok: true, panelMember: saved });
+});
+
+app.delete('/api/panel-members/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deletePanelMember(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  return res.json({ ok: true, deleted: result.deleted });
 });
 
 app.listen(PORT, () => {
