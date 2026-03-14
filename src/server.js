@@ -35,11 +35,26 @@ const {
   deleteHoliday
 } = require('./leave-storage');
 
+const {
+  initTodoDb,
+  ALLOWED_PRIORITIES,
+  ALLOWED_STATUSES,
+  listProjects,
+  upsertProject,
+  deleteProject,
+  listTodos,
+  getTodo,
+  upsertTodo,
+  patchTodoStatus,
+  deleteTodo
+} = require('./todo-storage');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 initDb();
 initLeaveDb();
+initTodoDb();
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -421,6 +436,83 @@ app.post('/api/leave/import', upload.single('file'), async (req, res) => {
   });
 
   res.json({ ok: true, imported, skipped, errors });
+});
+
+// ── Todo API ───────────────────────────────────────────────────────────────────
+
+const todoProjectSchema = z.object({
+  name:  z.string().trim().min(1, 'Name is required').max(200),
+  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Color must be a hex color').optional().default('#6366f1')
+});
+
+const todoSchema = z.object({
+  id:          z.number({ coerce: true }).int().positive().optional(),
+  title:       z.string().trim().min(1, 'Title is required').max(500),
+  description: z.string().trim().max(5000).default(''),
+  priority:    z.enum(['Low', 'Medium', 'High', 'Critical']).default('Medium'),
+  status:      z.enum(['Open', 'In Progress', 'Blocked', 'Done']).default('Open'),
+  dueDate:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').optional().nullable(),
+  projectId:   z.number({ coerce: true }).int().positive().optional().nullable()
+});
+
+const todoStatusSchema = z.object({
+  status: z.enum(['Open', 'In Progress', 'Blocked', 'Done'])
+});
+
+// Projects
+app.get('/api/todo/projects', (_req, res) => {
+  res.json({ ok: true, projects: listProjects() });
+});
+
+app.post('/api/todo/projects', (req, res) => {
+  const parsed = todoProjectSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const project = upsertProject(parsed.data);
+  res.json({ ok: true, project });
+});
+
+app.delete('/api/todo/projects/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteProject(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// Todos
+app.get('/api/todo/todos', (req, res) => {
+  const { projectId, status, priority, search, due } = req.query;
+  if (status && !ALLOWED_STATUSES.includes(status))
+    return res.status(400).json({ error: 'InvalidStatus' });
+  if (priority && !ALLOWED_PRIORITIES.includes(priority))
+    return res.status(400).json({ error: 'InvalidPriority' });
+  const todos = listTodos({ projectId, status, priority, search, due });
+  res.json({ ok: true, todos });
+});
+
+app.post('/api/todo/todos', (req, res) => {
+  const parsed = todoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const todo = upsertTodo(parsed.data);
+  res.json({ ok: true, todo });
+});
+
+app.patch('/api/todo/todos/:id/status', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = todoStatusSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const todo = patchTodoStatus(id, parsed.data.status);
+  if (!todo) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, todo });
+});
+
+app.delete('/api/todo/todos/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteTodo(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
 });
 
 app.listen(PORT, () => {
