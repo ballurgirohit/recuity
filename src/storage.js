@@ -98,6 +98,7 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       req_id TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'FTE',
       status TEXT NOT NULL,
       link TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -171,6 +172,11 @@ function initDb() {
   const hasReqName = reqCols.some((c) => c.name === 'name');
   if (!hasReqName) {
     db.exec("ALTER TABLE requisitions ADD COLUMN name TEXT NOT NULL DEFAULT ''; ");
+  }
+
+  const hasReqType = reqCols.some((c) => c.name === 'type');
+  if (!hasReqType) {
+    db.exec("ALTER TABLE requisitions ADD COLUMN type TEXT NOT NULL DEFAULT 'FTE';");
   }
 
   // 2) Lightweight migration(s)
@@ -402,26 +408,29 @@ function searchNotes(input) {
   const q = typeof input === 'string' ? input : String(input?.q ?? '').trim();
   const status = typeof input === 'string' ? '' : String(input?.status ?? '').trim();
   const requisitionId = typeof input === 'string' ? '' : String(input?.requisitionId ?? '').trim();
+  const reqType = typeof input === 'string' ? '' : String(input?.reqType ?? '').trim();
 
-  // If only status/requisitionId filters are provided, use indexed query (no FTS required)
-  if (!q && (status || requisitionId)) {
+  // If only status/requisitionId/reqType filters are provided, use indexed query (no FTS required)
+  if (!q && (status || requisitionId || reqType)) {
     const stmt = db.prepare(`
       SELECT
-        id, name, email,
-        COALESCE(status, 'New') AS status,
-        requisition_id AS requisitionId,
-        comments, created_at, updated_at
-      FROM candidate_notes
-      WHERE (@status = '' OR status = @status)
-        AND (@requisitionId = '' OR requisition_id = @requisitionId)
-      ORDER BY updated_at DESC
+        cn.id, cn.name, cn.email,
+        COALESCE(cn.status, 'New') AS status,
+        cn.requisition_id AS requisitionId,
+        cn.comments, cn.created_at, cn.updated_at
+      FROM candidate_notes cn
+      LEFT JOIN requisitions r ON r.req_id = cn.requisition_id
+      WHERE (@status = '' OR cn.status = @status)
+        AND (@requisitionId = '' OR cn.requisition_id = @requisitionId)
+        AND (@reqType = '' OR r.type = @reqType)
+      ORDER BY cn.updated_at DESC
       LIMIT 100;
     `);
-    return stmt.all({ status: status || '', requisitionId: requisitionId || '' });
+    return stmt.all({ status: status || '', requisitionId: requisitionId || '', reqType: reqType || '' });
   }
 
   const raw = q;
-  if (!raw && !status && !requisitionId) return [];
+  if (!raw && !status && !requisitionId && !reqType) return [];
 
   const terms = raw
     .toLowerCase()
@@ -442,13 +451,15 @@ function searchNotes(input) {
           cn.comments, cn.created_at, cn.updated_at
         FROM candidate_notes_fts fts
         JOIN candidate_notes cn ON cn.id = fts.rowid
+        LEFT JOIN requisitions r ON r.req_id = cn.requisition_id
         WHERE candidate_notes_fts MATCH @ftsQuery
           AND (@status = '' OR cn.status = @status)
           AND (@requisitionId = '' OR cn.requisition_id = @requisitionId)
+          AND (@reqType = '' OR r.type = @reqType)
         ORDER BY cn.updated_at DESC
         LIMIT 100;
       `);
-      return stmt.all({ ftsQuery, status: status || '', requisitionId: requisitionId || '' });
+      return stmt.all({ ftsQuery, status: status || '', requisitionId: requisitionId || '', reqType: reqType || '' });
     } catch {
       // fall through to LIKE
     }
@@ -457,42 +468,45 @@ function searchNotes(input) {
   const likeQuery = `%${raw.toLowerCase()}%`;
   const stmt = db.prepare(`
     SELECT
-      id, name, email,
-      COALESCE(status, 'New') AS status,
-      requisition_id AS requisitionId,
-      comments, created_at, updated_at
-    FROM candidate_notes
+      cn.id, cn.name, cn.email,
+      COALESCE(cn.status, 'New') AS status,
+      cn.requisition_id AS requisitionId,
+      cn.comments, cn.created_at, cn.updated_at
+    FROM candidate_notes cn
+    LEFT JOIN requisitions r ON r.req_id = cn.requisition_id
     WHERE (
-      lower(name) LIKE @likeQuery OR
-      lower(email) LIKE @likeQuery OR
-      lower(status) LIKE @likeQuery
+      lower(cn.name) LIKE @likeQuery OR
+      lower(cn.email) LIKE @likeQuery OR
+      lower(cn.status) LIKE @likeQuery
     )
-      AND (@status = '' OR status = @status)
-      AND (@requisitionId = '' OR requisition_id = @requisitionId)
-    ORDER BY updated_at DESC
+      AND (@status = '' OR cn.status = @status)
+      AND (@requisitionId = '' OR cn.requisition_id = @requisitionId)
+      AND (@reqType = '' OR r.type = @reqType)
+    ORDER BY cn.updated_at DESC
     LIMIT 100;
   `);
-  return stmt.all({ likeQuery, status: status || '', requisitionId: requisitionId || '' });
+  return stmt.all({ likeQuery, status: status || '', requisitionId: requisitionId || '', reqType: reqType || '' });
 }
 
-function upsertRequisition({ reqId, name, status, link }) {
+function upsertRequisition({ reqId, name, type, status, link }) {
   const now = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT INTO requisitions (req_id, name, status, link, created_at, updated_at)
-    VALUES (@reqId, @name, @status, @link, @now, @now)
+    INSERT INTO requisitions (req_id, name, type, status, link, created_at, updated_at)
+    VALUES (@reqId, @name, @type, @status, @link, @now, @now)
     ON CONFLICT(req_id) DO UPDATE SET
       name = excluded.name,
+      type = excluded.type,
       status = excluded.status,
       link = excluded.link,
       updated_at = excluded.updated_at
-    RETURNING id, req_id AS reqId, name, status, link, created_at, updated_at;
+    RETURNING id, req_id AS reqId, name, type, status, link, created_at, updated_at;
   `);
-  return stmt.get({ reqId, name, status, link, now });
+  return stmt.get({ reqId, name, type: type || 'FTE', status, link, now });
 }
 
 function listRequisitions() {
   const stmt = db.prepare(`
-    SELECT id, req_id AS reqId, name, status, link, created_at, updated_at
+    SELECT id, req_id AS reqId, name, type, status, link, created_at, updated_at
     FROM requisitions
     ORDER BY updated_at DESC
     LIMIT 200;

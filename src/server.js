@@ -79,14 +79,19 @@ app.get('/api/notes/search', (req, res) => {
   const q = String(req.query.q ?? '').trim();
   const status = String(req.query.status ?? '').trim();
   const requisitionId = String(req.query.requisitionId ?? '').trim();
+  const reqType = String(req.query.reqType ?? '').trim();
 
-  if (!q && !status && !requisitionId) return res.status(400).json({ error: 'QueryOrStatusRequired' });
+  if (!q && !status && !requisitionId && !reqType) return res.status(400).json({ error: 'QueryOrStatusRequired' });
 
   if (status && !allowedStatuses.includes(status)) {
     return res.status(400).json({ error: 'InvalidStatus' });
   }
 
-  const results = searchNotes({ q, status, requisitionId });
+  if (reqType && !['FTE', 'FTC'].includes(reqType)) {
+    return res.status(400).json({ error: 'InvalidReqType' });
+  }
+
+  const results = searchNotes({ q, status, requisitionId, reqType });
   return res.json({ ok: true, results });
 });
 
@@ -132,6 +137,7 @@ app.delete('/api/notes/id/:id', (req, res) => {
 const requisitionSchema = z.object({
   reqId: z.string().trim().min(1, 'Requisition id is required').max(100),
   name: z.string().trim().min(1, 'Requisition name is required').max(200),
+  type: z.enum(['FTC', 'FTE']).default('FTE'),
   status: z.string().trim().min(1, 'Status is required').max(100),
   link: z.string().trim().min(1, 'Link is required').url('Valid URL is required').max(2000)
 });

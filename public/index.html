@@ -169,6 +169,13 @@
                     <option value="" selected>Any requisition</option>
                   </select>
                 </div>
+                <div class="col-md-4">
+                  <select id="searchReqType" class="form-select" aria-label="Type">
+                    <option value="" selected>Any type</option>
+                    <option value="FTE">FTE</option>
+                    <option value="FTC">FTC</option>
+                  </select>
+                </div>
               </div>
               <div class="mt-2">
                 <button id="searchClearBtn" type="button" class="btn btn-light btn-sm">Clear</button>
@@ -190,6 +197,13 @@
 
               <div class="mb-2">
                 <input id="reqName" class="form-control" placeholder="Requisition name" aria-label="Requisition name" />
+              </div>
+
+              <div class="mb-2">
+                <select id="reqType" class="form-select" aria-label="Type">
+                  <option value="FTE" selected>FTE</option>
+                  <option value="FTC">FTC</option>
+                </select>
               </div>
 
               <div class="mb-2">
@@ -384,12 +398,14 @@
         const q = $('search').value.trim();
         const status = $('searchStatus').value.trim();
         const reqId = $('searchReqId').value.trim();
-        if (!q && !status && !reqId) return;
+        const reqType = $('searchReqType').value.trim();
+        if (!q && !status && !reqId && !reqType) return;
 
         const params = new URLSearchParams();
         if (q) params.set('q', q);
         if (status) params.set('status', status);
         if (reqId) params.set('requisitionId', reqId);
+        if (reqType) params.set('reqType', reqType);
 
         const resp = await fetch(`/api/notes/search?${params.toString()}`);
         const data = await resp.json();
@@ -421,7 +437,8 @@
         const q = $('search').value.trim();
         const status = $('searchStatus').value.trim();
         const reqId = $('searchReqId').value.trim();
-        if (!q && !status && !reqId) {
+        const reqType = $('searchReqType').value.trim();
+        if (!q && !status && !reqId && !reqType) {
           $('results').innerHTML = '';
           return;
         }
@@ -432,6 +449,7 @@
         $('search').value = '';
         $('searchStatus').value = '';
         $('searchReqId').value = '';
+        $('searchReqType').value = '';
         $('results').innerHTML = '';
         $('search').focus();
       }
@@ -446,6 +464,7 @@
       $('search').addEventListener('input', () => searchDebounced());
       $('searchStatus').addEventListener('change', () => searchDebounced());
       $('searchReqId').addEventListener('change', () => searchDebounced());
+      $('searchReqType').addEventListener('change', () => searchDebounced());
 
       // Keep Enter-to-search behavior
       $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
@@ -464,6 +483,7 @@
       function resetReqForm() {
         $('reqId').value = '';
         $('reqName').value = '';
+        $('reqType').value = 'FTE';
         $('reqStatus').value = '';
         $('reqLink').value = '';
         $('reqError').textContent = '';
@@ -499,7 +519,7 @@
             <div class="card-body py-2">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div>
-                  <div><strong>${escapeHtml(r.reqId)}</strong></div>
+                  <div><strong>${escapeHtml(r.reqId)}</strong> <span class="badge bg-secondary">${escapeHtml(r.type || '')}</span></div>
                   <div class="text-muted small">${escapeHtml(r.name || '')}</div>
                   <div class="text-muted small">Status: ${escapeHtml(r.status)}</div>
                   <div class="small"><a href="${escapeHtml(r.link)}" target="_blank" rel="noopener noreferrer">Open link</a></div>
@@ -515,6 +535,7 @@
           div.querySelector('[data-action="edit"]').addEventListener('click', () => {
             $('reqId').value = r.reqId;
             $('reqName').value = r.name || '';
+            $('reqType').value = r.type || 'FTE';
             $('reqStatus').value = r.status;
             $('reqLink').value = r.link;
             $('reqError').textContent = '';
@@ -543,6 +564,7 @@
         const payload = {
           reqId: $('reqId').value,
           name: $('reqName').value,
+          type: $('reqType').value,
           status: $('reqStatus').value,
           link: $('reqLink').value
         };

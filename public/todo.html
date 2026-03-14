@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+    <style>
+      /* ── Todo-specific design (does not affect index.html or leave.html) ── */
+      :root {
+        --td-bg:        #f4f6fb;
+        --td-surface:   #ffffff;
+        --td-border:    #e2e6ef;
+        --td-sidebar-w: 220px;
+        --td-accent:    #5b67f8;
+        --td-radius:    10px;
+        --td-text:      #1a1d2e;
+        --td-muted:     #6b7280;
+      }
+
+      body.todo-page {
+        background: var(--td-bg);
+        color: var(--td-text);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        min-height: 100vh;
+      }
+
+      /* Shared nav — identical bar as other pages */
+      .td-nav {
+        background: #fff;
+        border-bottom: 1px solid var(--td-border);
+        padding: 0 1rem;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      .td-nav .brand { font-weight: 700; font-size: 0.95rem; color: var(--td-text); text-decoration: none; }
+      .td-nav a { font-size: 0.875rem; color: var(--td-muted); text-decoration: none; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
+      .td-nav a:hover { background: var(--td-bg); color: var(--td-text); }
+      .td-nav a.active { color: var(--td-accent); font-weight: 600; }
+
+      /* Layout */
+      .td-layout { display: flex; height: calc(100vh - 48px); overflow: hidden; }
+
+      /* Sidebar */
+      .td-sidebar {
+        width: var(--td-sidebar-w);
+        min-width: var(--td-sidebar-w);
+        background: var(--td-surface);
+        border-right: 1px solid var(--td-border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 1rem 0.75rem;
+        gap: 0.25rem;
+      }
+      .td-sidebar-section { font-size: 0.7rem; font-weight: 700; letter-spacing: .06em; color: var(--td-muted); text-transform: uppercase; padding: 0.5rem 0.5rem 0.25rem; margin-top: 0.5rem; }
+      .td-sidebar-item {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.4rem 0.6rem; border-radius: 7px; cursor: pointer;
+        font-size: 0.85rem; color: var(--td-text); border: none; background: none; width: 100%; text-align: left;
+        transition: background .13s;
+      }
+      .td-sidebar-item:hover { background: var(--td-bg); }
+      .td-sidebar-item.active { background: #eef0fe; color: var(--td-accent); font-weight: 600; }
+      .td-sidebar-item .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+      .td-sidebar-item .badge-count {
+        margin-left: auto; font-size: 0.7rem; background: var(--td-bg);
+        border-radius: 10px; padding: 1px 7px; color: var(--td-muted); font-weight: 500;
+      }
+      .td-sidebar-item.active .badge-count { background: #d8dbff; color: var(--td-accent); }
+      .td-sidebar-add {
+        margin-top: 0.25rem; font-size: 0.82rem; color: var(--td-accent);
+        background: none; border: 1.5px dashed #c7caff; border-radius: 7px;
+        width: 100%; padding: 0.35rem 0.6rem; cursor: pointer; text-align: left;
+        transition: background .13s;
+      }
+      .td-sidebar-add:hover { background: #eef0fe; }
+
+      /* Main */
+      .td-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+      .td-toolbar {
+        background: var(--td-surface);
+        border-bottom: 1px solid var(--td-border);
+        padding: 0.6rem 1.25rem;
+        display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+      }
+      .td-toolbar h1 { font-size: 1rem; font-weight: 700; margin: 0; flex-shrink: 0; }
+      .td-search {
+        border: 1px solid var(--td-border); border-radius: 8px;
+        padding: 0.3rem 0.65rem; font-size: 0.85rem; outline: none;
+        background: var(--td-bg); color: var(--td-text); width: 200px;
+        transition: border-color .15s;
+      }
+      .td-search:focus { border-color: var(--td-accent); background: #fff; }
+      .td-filter-select {
+        border: 1px solid var(--td-border); border-radius: 8px;
+        padding: 0.3rem 0.6rem; font-size: 0.82rem; background: var(--td-bg);
+        color: var(--td-text); outline: none; cursor: pointer;
+      }
+      .td-filter-select:focus { border-color: var(--td-accent); }
+      .td-btn-new {
+        margin-left: auto; background: var(--td-accent); color: #fff;
+        border: none; border-radius: 8px; padding: 0.35rem 0.9rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+        transition: opacity .15s;
+      }
+      .td-btn-new:hover { opacity: .88; }
+
+      .td-list-wrap { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+
+      /* Stats strip */
+      .td-stats {
+        display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;
+      }
+      .td-stat {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: var(--td-radius); padding: 0.55rem 1rem; font-size: 0.8rem;
+        display: flex; flex-direction: column; gap: 2px; min-width: 80px;
+      }
+      .td-stat-num { font-size: 1.25rem; font-weight: 700; line-height: 1; }
+      .td-stat-lbl { color: var(--td-muted); }
+
+      /* Todo card */
+      .td-card {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: var(--td-radius); padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.75rem;
+        transition: box-shadow .15s, border-color .15s;
+        cursor: default;
+      }
+      .td-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.07); border-color: #c9cde8; }
+      .td-card.done { opacity: .55; }
+
+      .td-check {
+        width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--td-border);
+        flex-shrink: 0; cursor: pointer; margin-top: 2px;
+        display: flex; align-items: center; justify-content: center;
+        transition: border-color .15s, background .15s;
+      }
+      .td-check:hover { border-color: var(--td-accent); }
+      .td-check.checked { background: var(--td-accent); border-color: var(--td-accent); }
+      .td-check.checked::after { content: '✓'; color: #fff; font-size: 0.65rem; font-weight: 700; }
+
+      .td-card-body { flex: 1; min-width: 0; }
+      .td-card-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+      .td-card-title.strikethrough { text-decoration: line-through; color: var(--td-muted); }
+      .td-card-desc { font-size: 0.8rem; color: var(--td-muted); white-space: pre-wrap; margin-bottom: 4px;
+        display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .td-card-meta { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; font-size: 0.75rem; }
+
+      /* Priority badges */
+      .td-pri { border-radius: 5px; padding: 1px 7px; font-size: 0.72rem; font-weight: 600; }
+      .td-pri-Low      { background: #e9fbe9; color: #166534; }
+      .td-pri-Medium   { background: #fef9c3; color: #713f12; }
+      .td-pri-High     { background: #ffedd5; color: #7c2d12; }
+      .td-pri-Critical { background: #fee2e2; color: #7f1d1d; }
+
+      /* Status badges */
+      .td-status { border-radius: 5px; padding: 1px 7px; font-size: 0.72rem; font-weight: 600; }
+      .td-status-Open        { background: #eff6ff; color: #1e40af; }
+      .td-status-In\ Progress{ background: #faf5ff; color: #6b21a8; }
+      .td-status-Blocked     { background: #fff1f2; color: #9f1239; }
+      .td-status-Done        { background: #f0fdf4; color: #166534; }
+
+      /* Project dot chip */
+      .td-proj-chip { display: flex; align-items: center; gap: 4px; color: var(--td-muted); }
+      .td-proj-chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+      /* Due date */
+      .td-due { color: var(--td-muted); }
+      .td-due.overdue { color: #dc2626; font-weight: 600; }
+      .td-due.today-due { color: #d97706; font-weight: 600; }
+
+      /* Card actions */
+      .td-card-actions { display: flex; gap: 0.3rem; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
+      .td-card:hover .td-card-actions { opacity: 1; }
+      .td-icon-btn {
+        background: none; border: 1px solid var(--td-border); border-radius: 6px;
+        padding: 2px 7px; font-size: 0.75rem; cursor: pointer; color: var(--td-muted);
+        transition: background .13s, color .13s;
+      }
+      .td-icon-btn:hover { background: var(--td-bg); color: var(--td-text); }
+      .td-icon-btn.del:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+
+      /* Empty state */
+      .td-empty { text-align: center; padding: 3rem 1rem; color: var(--td-muted); }
+      .td-empty-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+
+      /* Group header */
+      .td-group-header {
+        font-size: 0.72rem; font-weight: 700; letter-spacing: .06em;
+        text-transform: uppercase; color: var(--td-muted);
+        margin: 1.1rem 0 0.4rem; display: flex; align-items: center; gap: 0.5rem;
+      }
+      .td-group-header::after { content:''; flex:1; height:1px; background: var(--td-border); }
+
+      /* Modal overrides — scoped to todo modal */
+      #tdModal .modal-content { border-radius: 14px; border: 1px solid var(--td-border); }
+      #tdModal .modal-header { border-bottom: 1px solid var(--td-border); padding: 1rem 1.25rem 0.75rem; }
+      #tdModal .modal-footer { border-top: 1px solid var(--td-border); padding: 0.75rem 1.25rem; }
+      #tdModal .form-control, #tdModal .form-select {
+        border-radius: 8px; border-color: var(--td-border); font-size: 0.875rem;
+      }
+      #tdModal .form-control:focus, #tdModal .form-select:focus {
+        border-color: var(--td-accent); box-shadow: 0 0 0 3px rgba(91,103,248,.15);
+      }
+      #tdModal label { font-size: 0.8rem; font-weight: 600; color: var(--td-muted); margin-bottom: 3px; }
+
+      /* Project modal */
+      #projModal .modal-content { border-radius: 14px; border: 1px solid var(--td-border); }
+
+      /* Colour swatches */
+      .color-swatches { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+      .color-swatch {
+        width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+        border: 2px solid transparent; transition: border-color .13s, transform .13s;
+      }
+      .color-swatch:hover, .color-swatch.selected { border-color: #1a1d2e; transform: scale(1.15); }
+
+      @media (max-width: 640px) {
+        .td-sidebar { display: none; }
+        .td-toolbar { gap: 0.4rem; }
+        .td-search { width: 130px; }
+      }
+    </style>
+  </head>
+  <body class="todo-page">
+
+    <!-- Shared nav -->
+    <nav class="td-nav">
+      <span class="brand">Recuity</span>
+      <a href="/index.html">Hiring</a>
+      <a href="/leave.html">Leave</a>
+      <a href="/todo.html" class="active">Todo</a>
+    </nav>
+
+    <div class="td-layout">
+
+      <!-- ── Sidebar ── -->
+      <aside class="td-sidebar">
+        <div class="td-sidebar-section" style="margin-top:0">Views</div>
+        <button class="td-sidebar-item active" data-view="all">
+          <span>📋</span> All Tasks
+          <span class="badge-count" id="cnt-all">0</span>
+        </button>
+        <button class="td-sidebar-item" data-view="today">
+          <span>📅</span> Due Today
+          <span class="badge-count" id="cnt-today">0</span>
+        </button>
+        <button class="td-sidebar-item" data-view="overdue">
+          <span>🔴</span> Overdue
+          <span class="badge-count" id="cnt-overdue">0</span>
+        </button>
+        <button class="td-sidebar-item" data-view="upcoming">
+          <span>🗓️</span> Upcoming
+          <span class="badge-count" id="cnt-upcoming">0</span>
+        </button>
+
+        <div class="td-sidebar-section">Projects</div>
+        <div id="sidebarProjects"></div>
+        <button class="td-sidebar-add" id="newProjectBtn">＋ New project</button>
+      </aside>
+
+      <!-- ── Main ── -->
+      <main class="td-main">
+        <!-- Toolbar -->
+        <div class="td-toolbar">
+          <h1 id="viewTitle">All Tasks</h1>
+          <input class="td-search" id="tdSearch" placeholder="Search…" autocomplete="off" />
+          <select class="td-filter-select" id="filterStatus">
+            <option value="">All statuses</option>
+            <option>Open</option>
+            <option>In Progress</option>
+            <option>Blocked</option>
+            <option>Done</option>
+          </select>
+          <select class="td-filter-select" id="filterPriority">
+            <option value="">All priorities</option>
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+            <option>Critical</option>
+          </select>
+          <button class="td-btn-new" id="newTodoBtn">＋ New Task</button>
+        </div>
+
+        <!-- List -->
+        <div class="td-list-wrap">
+          <!-- Stats strip -->
+          <div class="td-stats" id="statsStrip">
+            <div class="td-stat"><span class="td-stat-num" id="stat-open">0</span><span class="td-stat-lbl">Open</span></div>
+            <div class="td-stat"><span class="td-stat-num" id="stat-inprogress">0</span><span class="td-stat-lbl">In Progress</span></div>
+            <div class="td-stat"><span class="td-stat-num" id="stat-blocked">0</span><span class="td-stat-lbl">Blocked</span></div>
+            <div class="td-stat"><span class="td-stat-num" id="stat-done">0</span><span class="td-stat-lbl">Done</span></div>
+          </div>
+
+          <div id="tdList"></div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ── Todo modal ── -->
+    <div class="modal fade" id="tdModal" tabindex="-1" aria-labelledby="tdModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tdModalLabel">New Task</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="tdTitle">Title <span class="text-danger">*</span></label>
+              <input id="tdTitle" class="form-control" placeholder="What needs to be done?" autocomplete="off" />
+            </div>
+            <div class="mb-3">
+              <label for="tdDesc">Description</label>
+              <textarea id="tdDesc" class="form-control" rows="4" placeholder="Add more detail…"></textarea>
+            </div>
+            <div class="row g-2">
+              <div class="col-sm-3">
+                <label for="tdPriority">Priority</label>
+                <select id="tdPriority" class="form-select">
+                  <option>Low</option>
+                  <option selected>Medium</option>
+                  <option>High</option>
+                  <option>Critical</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label for="tdStatus">Status</label>
+                <select id="tdStatus" class="form-select">
+                  <option selected>Open</option>
+                  <option>In Progress</option>
+                  <option>Blocked</option>
+                  <option>Done</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label for="tdDueDate">Due Date</label>
+                <input id="tdDueDate" class="form-control" type="date" />
+              </div>
+              <div class="col-sm-3">
+                <label for="tdProject">Project</label>
+                <select id="tdProject" class="form-select">
+                  <option value="">— None —</option>
+                </select>
+              </div>
+            </div>
+            <div id="tdModalErr" class="text-danger small mt-2"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" id="tdSaveBtn">Save</button>
+            <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Project modal ── -->
+    <div class="modal fade" id="projModal" tabindex="-1" aria-labelledby="projModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="projModalLabel">New Project</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.8rem;font-weight:600;color:var(--td-muted)">Name <span class="text-danger">*</span></label>
+              <input id="projName" class="form-control form-control-sm" placeholder="Project name" autocomplete="off" />
+            </div>
+            <div class="mb-1">
+              <label class="form-label" style="font-size:0.8rem;font-weight:600;color:var(--td-muted)">Colour</label>
+              <div class="color-swatches" id="colorSwatches"></div>
+              <input type="hidden" id="projColor" value="#6366f1" />
+            </div>
+            <div id="projModalErr" class="text-danger small mt-2"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary btn-sm" id="projSaveBtn">Create</button>
+            <button class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"></script>
+
+    <script>
+      'use strict';
+      const $ = id => document.getElementById(id);
+      const esc = s => String(s ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
+      // ── State ────────────────────────────────────────────────────────────
+      let projects  = [];
+      let todos     = [];
+      let editingId = null;
+
+      // Current view/filter
+      let activeView      = 'all';   // 'all' | 'today' | 'overdue' | 'upcoming' | project id (number)
+      let activeProjectId = null;
+
+      // Modals
+      const tdModal   = new bootstrap.Modal($('tdModal'));
+      const projModal = new bootstrap.Modal($('projModal'));
+
+      // Colour palette
+      const PALETTE = [
+        '#6366f1','#8b5cf6','#ec4899','#ef4444',
+        '#f97316','#eab308','#22c55e','#14b8a6',
+        '#0ea5e9','#64748b'
+      ];
+
+      // ── API ──────────────────────────────────────────────────────────────
+      async function api(method, url, body) {
+        const opts = { method, headers: {} };
+        if (body !== undefined) {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body);
+        }
+        const r = await fetch(url, opts);
+        const d = await r.json().catch(() => ({}));
+        return { ok: r.ok, data: d, status: r.status };
+      }
+
+      // ── Load ─────────────────────────────────────────────────────────────
+      async function loadAll() {
+        await Promise.all([loadProjects(), loadTodos()]);
+      }
+
+      async function loadProjects() {
+        const { ok, data } = await api('GET', '/api/todo/projects');
+        if (!ok) return;
+        projects = data.projects ?? [];
+        renderSidebarProjects();
+        populateProjectSelect();
+        renderColorSwatches();
+      }
+
+      async function loadTodos() {
+        const params = new URLSearchParams();
+
+        if (activeView === 'today' || activeView === 'overdue' || activeView === 'upcoming') {
+          params.set('due', activeView);
+        } else if (typeof activeView === 'number') {
+          params.set('projectId', activeView);
+        }
+
+        const search   = $('tdSearch').value.trim();
+        const status   = $('filterStatus').value;
+        const priority = $('filterPriority').value;
+        if (search)   params.set('search',   search);
+        if (status)   params.set('status',   status);
+        if (priority) params.set('priority', priority);
+
+        const { ok, data } = await api('GET', `/api/todo/todos?${params}`);
+        if (!ok) return;
+        todos = data.todos ?? [];
+        renderList();
+        updateCounts();
+        renderStats();
+      }
+
+      // ── Sidebar ──────────────────────────────────────────────────────────
+      function renderSidebarProjects() {
+        const host = $('sidebarProjects');
+        host.innerHTML = '';
+        for (const p of projects) {
+          const btn = document.createElement('button');
+          btn.className = 'td-sidebar-item' + (activeView === p.id ? ' active' : '');
+          btn.dataset.view = p.id;
+          btn.innerHTML = `
+            <span class="dot" style="background:${esc(p.color)}"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</span>
+            <span class="badge-count">${p.total ?? 0}</span>
+          `;
+          btn.addEventListener('click', () => setView(p.id, p.name));
+
+          // Long-press / right-click to delete
+          btn.addEventListener('contextmenu', async (e) => {
+            e.preventDefault();
+            if (!confirm(`Delete project "${p.name}"?\nTasks in this project will become unassigned.`)) return;
+            const { ok } = await api('DELETE', `/api/todo/projects/${p.id}`);
+            if (ok) { if (activeView === p.id) setView('all', 'All Tasks'); else await loadProjects(); }
+          });
+
+          host.appendChild(btn);
+        }
+      }
+
+      function setView(view, title) {
+        activeView = typeof view === 'string' ? view : Number(view);
+        $('viewTitle').textContent = title;
+
+        document.querySelectorAll('.td-sidebar-item').forEach(btn => {
+          const v = isNaN(Number(btn.dataset.view)) ? btn.dataset.view : Number(btn.dataset.view);
+          btn.classList.toggle('active', v === activeView);
+        });
+
+        loadTodos();
+      }
+
+      document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const labels = { all: 'All Tasks', today: 'Due Today', overdue: 'Overdue', upcoming: 'Upcoming (7 days)' };
+          setView(btn.dataset.view, labels[btn.dataset.view] ?? btn.dataset.view);
+        });
+      });
+
+      // ── Counts (sidebar badges) — fetch totals cheaply ───────────────────
+      async function updateCounts() {
+        const views = ['all', 'today', 'overdue', 'upcoming'];
+        const results = await Promise.all(views.map(v => {
+          const p = new URLSearchParams();
+          if (v !== 'all') p.set('due', v);
+          return api('GET', `/api/todo/todos?${p}`);
+        }));
+        results.forEach(({ ok, data }, i) => {
+          if (ok) $(`cnt-${views[i]}`).textContent = data.todos?.length ?? 0;
+        });
+
+        // Project counts come from the projects list
+        await loadProjects();
+      }
+
+      // ── Stats strip ──────────────────────────────────────────────────────
+      function renderStats() {
+        const counts = { Open: 0, 'In Progress': 0, Blocked: 0, Done: 0 };
+        todos.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
+        $('stat-open').textContent      = counts['Open'];
+        $('stat-inprogress').textContent = counts['In Progress'];
+        $('stat-blocked').textContent   = counts['Blocked'];
+        $('stat-done').textContent      = counts['Done'];
+      }
+
+      // ── List rendering ───────────────────────────────────────────────────
+      function renderList() {
+        const host = $('tdList');
+        host.innerHTML = '';
+
+        if (!todos.length) {
+          host.innerHTML = `
+            <div class="td-empty">
+              <div class="td-empty-icon">✅</div>
+              <div style="font-weight:600;margin-bottom:4px">Nothing here</div>
+              <div style="font-size:0.85rem">Create a task with the <strong>＋ New Task</strong> button.</div>
+            </div>`;
+          return;
+        }
+
+        // Group: active then done
+        const active = todos.filter(t => t.status !== 'Done');
+        const done   = todos.filter(t => t.status === 'Done');
+
+        if (active.length) renderGroup(host, active);
+        if (done.length) {
+          const hdr = document.createElement('div');
+          hdr.className = 'td-group-header';
+          hdr.textContent = `Completed (${done.length})`;
+          host.appendChild(hdr);
+          renderGroup(host, done);
+        }
+      }
+
+      function renderGroup(host, items) {
+        for (const t of items) host.appendChild(makeTodoCard(t));
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      function makeTodoCard(t) {
+        const isDone = t.status === 'Done';
+        const card   = document.createElement('div');
+        card.className = 'td-card' + (isDone ? ' done' : '');
+
+        // Due date label
+        let dueHtml = '';
+        if (t.dueDate) {
+          let cls = 'td-due';
+          let label = `Due ${t.dueDate}`;
+          if (!isDone && t.dueDate < todayStr) { cls += ' overdue'; label = `Overdue · ${t.dueDate}`; }
+          else if (t.dueDate === todayStr)      { cls += ' today-due'; label = `Due today`; }
+          dueHtml = `<span class="${cls}">${esc(label)}</span>`;
+        }
+
+        // Project chip
+        let projHtml = '';
+        if (t.projectName) {
+          projHtml = `<span class="td-proj-chip"><span class="dot" style="background:${esc(t.projectColor ?? '#6366f1')}"></span>${esc(t.projectName)}</span>`;
+        }
+
+        card.innerHTML = `
+          <div class="td-check ${isDone ? 'checked' : ''}" data-id="${t.id}" title="Toggle done"></div>
+          <div class="td-card-body">
+            <div class="td-card-title ${isDone ? 'strikethrough' : ''}">${esc(t.title)}</div>
+            ${t.description ? `<div class="td-card-desc">${esc(t.description)}</div>` : ''}
+            <div class="td-card-meta">
+              <span class="td-pri td-pri-${esc(t.priority)}">${esc(t.priority)}</span>
+              <span class="td-status td-status-${esc(t.status)}">${esc(t.status)}</span>
+              ${projHtml}
+              ${dueHtml}
+            </div>
+          </div>
+          <div class="td-card-actions">
+            <button class="td-icon-btn" data-action="edit" title="Edit">Edit</button>
+            <button class="td-icon-btn del" data-action="del" title="Delete">✕</button>
+          </div>
+        `;
+
+        // Toggle done
+        card.querySelector('.td-check').addEventListener('click', async () => {
+          const newStatus = isDone ? 'Open' : 'Done';
+          const { ok } = await api('PATCH', `/api/todo/todos/${t.id}/status`, { status: newStatus });
+          if (ok) loadTodos();
+        });
+
+        card.querySelector('[data-action="edit"]').addEventListener('click', () => openTodoModal(t));
+        card.querySelector('[data-action="del"]').addEventListener('click', async () => {
+          if (!confirm(`Delete "${t.title}"?`)) return;
+          const { ok } = await api('DELETE', `/api/todo/todos/${t.id}`);
+          if (ok) loadTodos();
+        });
+
+        return card;
+      }
+
+      // ── Todo modal ───────────────────────────────────────────────────────
+      function openTodoModal(todo = null) {
+        editingId = todo?.id ?? null;
+        $('tdModalLabel').textContent = todo ? 'Edit Task' : 'New Task';
+        $('tdTitle').value    = todo?.title       ?? '';
+        $('tdDesc').value     = todo?.description ?? '';
+        $('tdPriority').value = todo?.priority    ?? 'Medium';
+        $('tdStatus').value   = todo?.status      ?? 'Open';
+        $('tdDueDate').value  = todo?.dueDate      ?? '';
+        $('tdProject').value  = todo?.projectId    ?? '';
+        $('tdModalErr').textContent = '';
+        tdModal.show();
+        setTimeout(() => $('tdTitle').focus(), 300);
+      }
+
+      $('newTodoBtn').addEventListener('click', () => openTodoModal());
+
+      $('tdSaveBtn').addEventListener('click', async () => {
+        $('tdModalErr').textContent = '';
+        const payload = {
+          title:       $('tdTitle').value,
+          description: $('tdDesc').value,
+          priority:    $('tdPriority').value,
+          status:      $('tdStatus').value,
+          dueDate:     $('tdDueDate').value || null,
+          projectId:   $('tdProject').value ? Number($('tdProject').value) : null
+        };
+        if (editingId) payload.id = editingId;
+
+        const { ok, data } = await api('POST', '/api/todo/todos', payload);
+        if (!ok) {
+          $('tdModalErr').textContent = data?.details
+            ? Object.values(data.details.fieldErrors ?? {}).flat().join(', ')
+            : (data?.error ?? 'Save failed');
+          return;
+        }
+        tdModal.hide();
+        loadTodos();
+      });
+
+      // Enter in title submits
+      $('tdTitle').addEventListener('keydown', e => { if (e.key === 'Enter') $('tdSaveBtn').click(); });
+
+      // ── Project modal ────────────────────────────────────────────────────
+      function renderColorSwatches() {
+        const host = $('colorSwatches');
+        host.innerHTML = '';
+        const cur = $('projColor').value || PALETTE[0];
+        for (const c of PALETTE) {
+          const s = document.createElement('div');
+          s.className = 'color-swatch' + (c === cur ? ' selected' : '');
+          s.style.background = c;
+          s.title = c;
+          s.addEventListener('click', () => {
+            $('projColor').value = c;
+            host.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+            s.classList.add('selected');
+          });
+          host.appendChild(s);
+        }
+      }
+
+      function populateProjectSelect() {
+        const sel = $('tdProject');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">— None —</option>';
+        for (const p of projects) {
+          const o = document.createElement('option');
+          o.value = p.id;
+          o.textContent = p.name;
+          sel.appendChild(o);
+        }
+        sel.value = cur;
+      }
+
+      $('newProjectBtn').addEventListener('click', () => {
+        $('projName').value = '';
+        $('projColor').value = PALETTE[0];
+        $('projModalErr').textContent = '';
+        renderColorSwatches();
+        projModal.show();
+        setTimeout(() => $('projName').focus(), 300);
+      });
+
+      $('projSaveBtn').addEventListener('click', async () => {
+        $('projModalErr').textContent = '';
+        const { ok, data } = await api('POST', '/api/todo/projects', {
+          name:  $('projName').value,
+          color: $('projColor').value
+        });
+        if (!ok) {
+          $('projModalErr').textContent = data?.details
+            ? Object.values(data.details.fieldErrors ?? {}).flat().join(', ')
+            : (data?.error ?? 'Save failed');
+          return;
+        }
+        projModal.hide();
+        await loadProjects();
+        loadTodos();
+      });
+
+      $('projName').addEventListener('keydown', e => { if (e.key === 'Enter') $('projSaveBtn').click(); });
+
+      // ── Filter/search ────────────────────────────────────────────────────
+      let searchTimer;
+      $('tdSearch').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(loadTodos, 220);
+      });
+      $('filterStatus').addEventListener('change',   loadTodos);
+      $('filterPriority').addEventListener('change', loadTodos);
+
+      // ── Init ─────────────────────────────────────────────────────────────
+      loadAll();
+    </script>
+  </body>
+</html>
