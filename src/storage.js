@@ -11,12 +11,13 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function formatStatusAuditLine({ fromStatus, toStatus, at, panelName }) {
+function formatStatusAuditLine({ fromStatus, toStatus, at, panelName, interviewDate }) {
   const ts = String(at).replace('T', ' ').replace('Z', '');
   const from = fromStatus ? String(fromStatus) : '∅';
   const to = toStatus ? String(toStatus) : '∅';
   const panel = panelName ? ` | Panel: ${panelName}` : '';
-  return `[${ts}] Status: ${from} → ${to}${panel}`;
+  const date = interviewDate ? ` | Interview: ${interviewDate}` : '';
+  return `[${ts}] Status: ${from} → ${to}${panel}${date}`;
 }
 
 function appendLine(existing, line) {
@@ -40,7 +41,7 @@ function getPanelName(panelId) {
   return row?.name ?? null;
 }
 
-function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments, panelId }) {
+function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments, panelId, interviewDate }) {
   const prevStatusRaw = existing?.status;
   const nextStatusRaw = newStatus;
 
@@ -52,7 +53,8 @@ function buildCommentsWithStatusAudit({ existing, newStatus, incomingComments, p
       fromStatus: String(prevStatusRaw ?? '').trim() || 'New',
       toStatus: String(nextStatusRaw ?? '').trim() || 'New',
       at: nowIso(),
-      panelName
+      panelName,
+      interviewDate: interviewDate ? String(interviewDate).trim() : null
     });
     comments = appendLine(comments, line);
   }
@@ -65,7 +67,8 @@ function getExistingNoteForUpsert({ name, email }) {
   if (normalizedEmail) {
     const stmt = db.prepare(`
       SELECT id, name, email, COALESCE(status, 'New') AS status,
-        requisition_id AS requisitionId, panel_member_id AS panelId, comments
+        requisition_id AS requisitionId, panel_member_id AS panelId,
+        interview_date AS interviewDate, comments
       FROM candidate_notes
       WHERE lower(email) = lower(@email)
       LIMIT 1;
@@ -75,7 +78,8 @@ function getExistingNoteForUpsert({ name, email }) {
 
   const stmt = db.prepare(`
     SELECT id, name, email, COALESCE(status, 'New') AS status,
-      requisition_id AS requisitionId, panel_member_id AS panelId, comments
+      requisition_id AS requisitionId, panel_member_id AS panelId,
+      interview_date AS interviewDate, comments
     FROM candidate_notes
     WHERE lower(name) = lower(@name)
       AND (email IS NULL OR email = '')
@@ -99,6 +103,7 @@ function initDb() {
       status TEXT NOT NULL DEFAULT 'New',
       requisition_id TEXT,
       panel_member_id INTEGER,
+      interview_date TEXT,
       comments TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -135,6 +140,7 @@ function initDb() {
           status TEXT NOT NULL DEFAULT 'New',
           requisition_id TEXT,
           panel_member_id INTEGER,
+          interview_date TEXT,
           comments TEXT NOT NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -144,8 +150,8 @@ function initDb() {
           ON candidate_notes(lower(email))
           WHERE email IS NOT NULL AND email <> '';
 
-        INSERT INTO candidate_notes (id, name, email, status, requisition_id, panel_member_id, comments, created_at, updated_at)
-        SELECT id, name, email, COALESCE(status, 'New'), requisition_id, NULL, comments, created_at, updated_at
+        INSERT INTO candidate_notes (id, name, email, status, requisition_id, panel_member_id, interview_date, comments, created_at, updated_at)
+        SELECT id, name, email, COALESCE(status, 'New'), requisition_id, NULL, NULL, comments, created_at, updated_at
         FROM candidate_notes_old;
 
         DROP TABLE candidate_notes_old;
@@ -211,6 +217,12 @@ function initDb() {
     db.exec('ALTER TABLE candidate_notes ADD COLUMN panel_member_id INTEGER;');
   }
 
+  // Add interview_date column if missing
+  const hasInterviewDate = cols.some((c) => c.name === 'interview_date');
+  if (!hasInterviewDate) {
+    db.exec('ALTER TABLE candidate_notes ADD COLUMN interview_date TEXT;');
+  }
+
   // 3) FTS (create after all columns exist). We drop/recreate to keep schema in sync.
   db.exec(`
     DROP TABLE IF EXISTS candidate_notes_fts;
@@ -270,17 +282,18 @@ function initDb() {
   `);
 }
 
-function createCandidateNote({ name, email, status, requisitionId, panelId, comments }) {
+function createCandidateNote({ name, email, status, requisitionId, panelId, interviewDate, comments }) {
   const now = nowIso();
   const stmt = db.prepare(`
-    INSERT INTO candidate_notes (name, email, status, requisition_id, panel_member_id, comments, created_at, updated_at)
-    VALUES (@name, NULLIF(@email, ''), @status, NULLIF(@requisitionId, ''), NULLIF(@panelId, ''), @comments, @now, @now)
+    INSERT INTO candidate_notes (name, email, status, requisition_id, panel_member_id, interview_date, comments, created_at, updated_at)
+    VALUES (@name, NULLIF(@email, ''), @status, NULLIF(@requisitionId, ''), NULLIF(@panelId, ''), NULLIF(@interviewDate, ''), @comments, @now, @now)
     RETURNING id, name, email, status,
       requisition_id AS requisitionId,
       panel_member_id AS panelId,
+      interview_date AS interviewDate,
       comments, created_at, updated_at;
   `);
-  return stmt.get({ name, email: email ?? '', status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', comments, now });
+  return stmt.get({ name, email: email ?? '', status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', interviewDate: interviewDate ?? '', comments, now });
 }
 
 function getNoEmailNoteByName(name) {
@@ -288,6 +301,7 @@ function getNoEmailNoteByName(name) {
     SELECT id, name, email, COALESCE(status, 'New') AS status,
       requisition_id AS requisitionId,
       panel_member_id AS panelId,
+      interview_date AS interviewDate,
       comments, created_at, updated_at
     FROM candidate_notes
     WHERE lower(name) = lower(@name)
@@ -332,13 +346,14 @@ function getNextAvailableNoEmailName(baseName) {
   return `${base} - ${next}`;
 }
 
-function updateNoEmailNoteByName({ name, status, requisitionId, panelId, comments }) {
+function updateNoEmailNoteByName({ name, status, requisitionId, panelId, interviewDate, comments }) {
   const now = nowIso();
   const stmt = db.prepare(`
     UPDATE candidate_notes
     SET status = @status,
         requisition_id = NULLIF(@requisitionId, ''),
         panel_member_id = NULLIF(@panelId, ''),
+        interview_date = NULLIF(@interviewDate, ''),
         comments = @comments,
         updated_at = @now
     WHERE lower(name) = lower(@name)
@@ -346,12 +361,13 @@ function updateNoEmailNoteByName({ name, status, requisitionId, panelId, comment
     RETURNING id, name, email, status,
       requisition_id AS requisitionId,
       panel_member_id AS panelId,
+      interview_date AS interviewDate,
       comments, created_at, updated_at;
   `);
-  return stmt.get({ name, status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', comments, now });
+  return stmt.get({ name, status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', interviewDate: interviewDate ?? '', comments, now });
 }
 
-function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, panelId, comments }) {
+function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, panelId, interviewDate, comments }) {
   const now = nowIso();
   const stmt = db.prepare(`
     UPDATE candidate_notes
@@ -359,6 +375,7 @@ function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, p
         status = @status,
         requisition_id = NULLIF(@requisitionId, ''),
         panel_member_id = NULLIF(@panelId, ''),
+        interview_date = NULLIF(@interviewDate, ''),
         comments = @comments,
         updated_at = @now
     WHERE lower(name) = lower(@name)
@@ -366,17 +383,18 @@ function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, p
     RETURNING id, name, email, status,
       requisition_id AS requisitionId,
       panel_member_id AS panelId,
+      interview_date AS interviewDate,
       comments, created_at, updated_at;
   `);
-  return stmt.get({ name: String(name ?? '').trim(), email: String(email ?? '').trim(), status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', comments, now });
+  return stmt.get({ name: String(name ?? '').trim(), email: String(email ?? '').trim(), status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', interviewDate: interviewDate ?? '', comments, now });
 }
 
-function upsertCandidateNote({ name, email, status, requisitionId, panelId, comments, onNameConflict }) {
+function upsertCandidateNote({ name, email, status, requisitionId, panelId, interviewDate, comments, onNameConflict }) {
   const normalizedEmail = String(email ?? '').trim();
 
   // Find existing row first so we can append a dated status change line.
   const existing = getExistingNoteForUpsert({ name, email: normalizedEmail });
-  const commentsWithAudit = buildCommentsWithStatusAudit({ existing, newStatus: status, incomingComments: comments, panelId });
+  const commentsWithAudit = buildCommentsWithStatusAudit({ existing, newStatus: status, incomingComments: comments, panelId, interviewDate });
 
   // If the user provided an email but there is no existing record by email,
   // allow "promoting" a no-email record (matched by name) to have this email.
@@ -389,6 +407,7 @@ function upsertCandidateNote({ name, email, status, requisitionId, panelId, comm
         status,
         requisitionId,
         panelId,
+        interviewDate,
         comments: commentsWithAudit
       });
     }
@@ -401,14 +420,14 @@ function upsertCandidateNote({ name, email, status, requisitionId, panelId, comm
   const existingNoEmail = getNoEmailNoteByName(baseName);
   if (existingNoEmail && mode === 'suffix') {
     const newName = getNextAvailableNoEmailName(baseName);
-    return createCandidateNote({ name: newName, email: '', status, requisitionId, panelId, comments: commentsWithAudit });
+    return createCandidateNote({ name: newName, email: '', status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
   }
 
   if (existingNoEmail) {
-    return updateNoEmailNoteByName({ name: baseName, status, requisitionId, panelId, comments: commentsWithAudit });
+    return updateNoEmailNoteByName({ name: baseName, status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
   }
 
-  return createCandidateNote({ name: baseName, email: '', status, requisitionId, panelId, comments: commentsWithAudit });
+  return createCandidateNote({ name: baseName, email: '', status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
 }
 
 function getNoteByEmail(email) {
@@ -419,6 +438,7 @@ function getNoteByEmail(email) {
     SELECT id, name, email, COALESCE(status, 'New') AS status,
       requisition_id AS requisitionId,
       panel_member_id AS panelId,
+      interview_date AS interviewDate,
       comments, created_at, updated_at
     FROM candidate_notes
     WHERE lower(email) = lower(@email)
@@ -465,6 +485,7 @@ function searchNotes(input) {
         COALESCE(cn.status, 'New') AS status,
         cn.requisition_id AS requisitionId,
         cn.panel_member_id AS panelId,
+        cn.interview_date AS interviewDate,
         pm.name AS panelName,
         cn.comments, cn.created_at, cn.updated_at
       FROM candidate_notes cn
@@ -499,6 +520,7 @@ function searchNotes(input) {
           COALESCE(cn.status, 'New') AS status,
           cn.requisition_id AS requisitionId,
           cn.panel_member_id AS panelId,
+          cn.interview_date AS interviewDate,
           pm.name AS panelName,
           cn.comments, cn.created_at, cn.updated_at
         FROM candidate_notes_fts fts
@@ -525,6 +547,7 @@ function searchNotes(input) {
       COALESCE(cn.status, 'New') AS status,
       cn.requisition_id AS requisitionId,
       cn.panel_member_id AS panelId,
+      cn.interview_date AS interviewDate,
       pm.name AS panelName,
       cn.comments, cn.created_at, cn.updated_at
     FROM candidate_notes cn

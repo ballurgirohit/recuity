@@ -130,6 +130,9 @@
                     <option value="" selected>Panel</option>
                   </select>
                 </div>
+                <div class="col-md-4">
+                  <input id="interviewDate" class="form-control" type="date" aria-label="Interview Date" title="Interview Date" />
+                </div>
               </div>
 
               <div class="mt-3">
@@ -281,6 +284,7 @@
         $('status').value = '';
         $('reqSelect').value = '';
         $('panelSelect').value = '';
+        $('interviewDate').value = '';
         $('comments').value = '';
         $('saveError').textContent = '';
       }
@@ -294,6 +298,7 @@
         const status = $('status').value || 'New';
         const requisitionId = $('reqSelect').value;
         const panelId = $('panelSelect').value;
+        const interviewDate = $('interviewDate').value;
         const comments = $('comments').value;
 
         let onNameConflict;
@@ -318,6 +323,7 @@
           status,
           requisitionId,
           panelId,
+          interviewDate,
           comments,
           ...(onNameConflict ? { onNameConflict } : {})
         };
@@ -398,6 +404,7 @@
             $('status').value = r.status || '';
             if ($('reqSelect')) $('reqSelect').value = r.requisitionId || '';
             if ($('panelSelect')) $('panelSelect').value = r.panelId || '';
+            $('interviewDate').value = r.interviewDate || '';
             $('comments').value = r.comments;
             $('saveError').textContent = '';
             $('saveStatus').textContent = 'Editing loaded note. Click Save to update.';
