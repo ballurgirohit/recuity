@@ -533,6 +533,8 @@ const orgNodeSchema = z.object({
   title:      z.string().trim().max(200).default(''),
   department: z.string().trim().max(200).default(''),
   email:      z.string().trim().max(320).default(''),
+  emp_id:     z.string().trim().max(100).default(''),
+  phone:      z.string().trim().max(30).default(''),
   parent_id:  z.number({ coerce: true }).int().positive().optional().nullable(),
   sort_order: z.number({ coerce: true }).int().default(0)
 }).superRefine((val, ctx) => {

@@ -25,30 +25,38 @@ function initOrgDb() {
       title      TEXT    NOT NULL DEFAULT '',
       department TEXT    NOT NULL DEFAULT '',
       email      TEXT    NOT NULL DEFAULT '',
+      emp_id     TEXT    NOT NULL DEFAULT '',
+      phone      TEXT    NOT NULL DEFAULT '',
       parent_id  INTEGER REFERENCES org_nodes(id) ON DELETE SET NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // Migrate existing DBs that predate emp_id / phone columns
+  const cols = d.prepare(`PRAGMA table_info(org_nodes)`).all().map(r => r.name);
+  if (!cols.includes('emp_id')) d.exec(`ALTER TABLE org_nodes ADD COLUMN emp_id TEXT NOT NULL DEFAULT ''`);
+  if (!cols.includes('phone'))  d.exec(`ALTER TABLE org_nodes ADD COLUMN phone  TEXT NOT NULL DEFAULT ''`);
 }
 
 /** Return the full flat list of all org nodes. */
 function listOrgNodes() {
   return getDb().prepare(
-    `SELECT id, name, title, department, email, parent_id, sort_order, created_at, updated_at
+    `SELECT id, name, title, department, email, emp_id, phone, parent_id, sort_order, created_at, updated_at
      FROM org_nodes ORDER BY sort_order ASC, id ASC`
   ).all();
 }
 
 const upsertStmt = () => getDb().prepare(`
-  INSERT INTO org_nodes (id, name, title, department, email, parent_id, sort_order, updated_at)
-  VALUES (@id, @name, @title, @department, @email, @parent_id, @sort_order, datetime('now'))
+  INSERT INTO org_nodes (id, name, title, department, email, emp_id, phone, parent_id, sort_order, updated_at)
+  VALUES (@id, @name, @title, @department, @email, @emp_id, @phone, @parent_id, @sort_order, datetime('now'))
   ON CONFLICT(id) DO UPDATE SET
     name       = excluded.name,
     title      = excluded.title,
     department = excluded.department,
     email      = excluded.email,
+    emp_id     = excluded.emp_id,
+    phone      = excluded.phone,
     parent_id  = excluded.parent_id,
     sort_order = excluded.sort_order,
     updated_at = datetime('now')
@@ -58,24 +66,24 @@ const upsertStmt = () => getDb().prepare(`
  * Upsert an org node. Pass id=null/undefined to insert a new one.
  * Returns the saved node.
  */
-function upsertOrgNode({ id, name, title, department, email, parent_id, sort_order }) {
+function upsertOrgNode({ id, name, title, department, email, emp_id, phone, parent_id, sort_order }) {
   const d = getDb();
 
-  // Prevent a node from being its own parent or creating a cycle
   if (id && parent_id && parent_id === id) {
     throw new Error('A node cannot be its own parent');
   }
 
   const stmt = upsertStmt();
+  const base = { name, title, department, email, emp_id: emp_id ?? '', phone: phone ?? '', parent_id: parent_id ?? null, sort_order: sort_order ?? 0 };
 
   if (id) {
-    stmt.run({ id, name, title, department, email, parent_id: parent_id ?? null, sort_order: sort_order ?? 0 });
+    stmt.run({ id, ...base });
     return d.prepare('SELECT * FROM org_nodes WHERE id = ?').get(id);
   } else {
     const info = d.prepare(`
-      INSERT INTO org_nodes (name, title, department, email, parent_id, sort_order)
-      VALUES (@name, @title, @department, @email, @parent_id, @sort_order)
-    `).run({ name, title, department, email, parent_id: parent_id ?? null, sort_order: sort_order ?? 0 });
+      INSERT INTO org_nodes (name, title, department, email, emp_id, phone, parent_id, sort_order)
+      VALUES (@name, @title, @department, @email, @emp_id, @phone, @parent_id, @sort_order)
+    `).run(base);
     return d.prepare('SELECT * FROM org_nodes WHERE id = ?').get(info.lastInsertRowid);
   }
 }

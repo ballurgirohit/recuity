@@ -92,6 +92,8 @@
       .org-node .node-name  { font-weight: 600; font-size: .88rem; line-height: 1.2; word-break: break-word; }
       .org-node .node-title { font-size: .75rem; color: #6e7781; margin-top: .15rem; word-break: break-word; }
       .org-node .node-dept  { font-size: .7rem;  color: #9ba4ae;  margin-top: .1rem; word-break: break-word; }
+      .org-node .node-empid { font-size: .7rem;  color: #9ba4ae;  margin-top: .1rem; word-break: break-word; }
+      .org-node .node-phone { font-size: .7rem;  color: #9ba4ae;  margin-top: .1rem; word-break: break-word; }
 
       .org-node .node-actions {
         display: none;
@@ -194,6 +196,12 @@
                 <input id="nodeEmail" class="form-control form-control-sm" type="email" placeholder="Email" />
               </div>
               <div class="mb-2">
+                <input id="nodeEmpId" class="form-control form-control-sm" placeholder="Employee ID" />
+              </div>
+              <div class="mb-2">
+                <input id="nodePhone" class="form-control form-control-sm" type="tel" placeholder="Phone" />
+              </div>
+              <div class="mb-2">
                 <select id="nodeParent" class="form-select form-select-sm">
                   <option value="">— No parent (root) —</option>
                 </select>
@@ -254,6 +262,8 @@
         const title      = $('nodeTitle').value.trim();
         const department = $('nodeDept').value.trim();
         const email      = $('nodeEmail').value.trim();
+        const emp_id     = $('nodeEmpId').value.trim();
+        const phone      = $('nodePhone').value.trim();
         const parent_id  = $('nodeParent').value ? Number($('nodeParent').value) : null;
         const sort_order = Number($('nodeSortOrder').value) || 0;
 
@@ -263,7 +273,7 @@
           return;
         }
 
-        const payload = { name, title, department, email, parent_id, sort_order };
+        const payload = { name, title, department, email, emp_id, phone, parent_id, sort_order };
         if (id) payload.id = id;
 
         const resp = await fetch('/api/org/nodes', {
@@ -301,6 +311,8 @@
         $('nodeTitle').value     = '';
         $('nodeDept').value      = '';
         $('nodeEmail').value     = '';
+        $('nodeEmpId').value     = '';
+        $('nodePhone').value     = '';
         $('nodeParent').value    = '';
         $('nodeSortOrder').value = '0';
         $('formError').textContent  = '';
@@ -316,6 +328,8 @@
         $('nodeTitle').value     = node.title      || '';
         $('nodeDept').value      = node.department || '';
         $('nodeEmail').value     = node.email      || '';
+        $('nodeEmpId').value     = node.emp_id     || '';
+        $('nodePhone').value     = node.phone      || '';
         $('nodeParent').value    = node.parent_id  ?? '';
         $('nodeSortOrder').value = node.sort_order ?? 0;
         $('formError').textContent  = '';
@@ -388,6 +402,8 @@
           <div class="node-name">${escapeHtml(node.name)}</div>
           ${node.title      ? `<div class="node-title">${escapeHtml(node.title)}</div>`      : ''}
           ${node.department ? `<div class="node-dept">${escapeHtml(node.department)}</div>`  : ''}
+          ${node.emp_id     ? `<div class="node-empid">${escapeHtml(node.emp_id)}</div>`     : ''}
+          ${node.phone      ? `<div class="node-phone">${escapeHtml(node.phone)}</div>`      : ''}
         `;
 
         card.addEventListener('click', (e) => {

@@ -389,6 +389,28 @@ function updateNoEmailNoteSetEmailByName({ name, email, status, requisitionId, p
   return stmt.get({ name: String(name ?? '').trim(), email: String(email ?? '').trim(), status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', interviewDate: interviewDate ?? '', comments, now });
 }
 
+function updateNoteById({ id, name, email, status, requisitionId, panelId, interviewDate, comments }) {
+  const now = nowIso();
+  const stmt = db.prepare(`
+    UPDATE candidate_notes
+    SET name = @name,
+        email = NULLIF(@email, ''),
+        status = @status,
+        requisition_id = NULLIF(@requisitionId, ''),
+        panel_member_id = NULLIF(@panelId, ''),
+        interview_date = NULLIF(@interviewDate, ''),
+        comments = @comments,
+        updated_at = @now
+    WHERE id = @id
+    RETURNING id, name, email, status,
+      requisition_id AS requisitionId,
+      panel_member_id AS panelId,
+      interview_date AS interviewDate,
+      comments, created_at, updated_at;
+  `);
+  return stmt.get({ id, name, email: email ?? '', status, requisitionId: requisitionId ?? '', panelId: panelId ?? '', interviewDate: interviewDate ?? '', comments, now });
+}
+
 function upsertCandidateNote({ name, email, status, requisitionId, panelId, interviewDate, comments, onNameConflict }) {
   const normalizedEmail = String(email ?? '').trim();
 
@@ -396,13 +418,29 @@ function upsertCandidateNote({ name, email, status, requisitionId, panelId, inte
   const existing = getExistingNoteForUpsert({ name, email: normalizedEmail });
   const commentsWithAudit = buildCommentsWithStatusAudit({ existing, newStatus: status, incomingComments: comments, panelId, interviewDate });
 
-  // If the user provided an email but there is no existing record by email,
-  // allow "promoting" a no-email record (matched by name) to have this email.
-  if (normalizedEmail && !existing) {
+  // Case 1: existing record found (by email or by name-without-email).
+  // Update it in place and return — never fall through to create.
+  if (existing) {
+    return updateNoteById({
+      id: existing.id,
+      name: String(name ?? '').trim(),
+      email: normalizedEmail,
+      status,
+      requisitionId,
+      panelId,
+      interviewDate,
+      comments: commentsWithAudit
+    });
+  }
+
+  // Case 2: email provided but no record found by email.
+  // "Promote" a no-email record with the same name if one exists.
+  if (normalizedEmail) {
     const existingNoEmail = getNoEmailNoteByName(name);
     if (existingNoEmail) {
-      return updateNoEmailNoteSetEmailByName({
-        name,
+      return updateNoteById({
+        id: existingNoEmail.id,
+        name: String(name ?? '').trim(),
         email: normalizedEmail,
         status,
         requisitionId,
@@ -411,9 +449,11 @@ function upsertCandidateNote({ name, email, status, requisitionId, panelId, inte
         comments: commentsWithAudit
       });
     }
+    // No existing record at all — create a new one with the email.
+    return createCandidateNote({ name: String(name ?? '').trim(), email: normalizedEmail, status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
   }
 
-  // If email isn't provided, upsert by (case-insensitive) name.
+  // Case 3: no email provided — upsert by (case-insensitive) name.
   const baseName = String(name ?? '').trim();
   const mode = onNameConflict === 'suffix' ? 'suffix' : 'update';
 
@@ -424,7 +464,16 @@ function upsertCandidateNote({ name, email, status, requisitionId, panelId, inte
   }
 
   if (existingNoEmail) {
-    return updateNoEmailNoteByName({ name: baseName, status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
+    return updateNoteById({
+      id: existingNoEmail.id,
+      name: baseName,
+      email: '',
+      status,
+      requisitionId,
+      panelId,
+      interviewDate,
+      comments: commentsWithAudit
+    });
   }
 
   return createCandidateNote({ name: baseName, email: '', status, requisitionId, panelId, interviewDate, comments: commentsWithAudit });
