@@ -1,6 +1,6 @@
-# Recuity — Hiring, Leave & Todo Tracker
+# Recuity — Hiring, Leave, Todo & Org Tracker
 
-A local web app with three integrated modules: **Interview Notes**, **Leave Management**, and **Todo / Task Tracker**. All data is stored in local SQLite databases — no internet connection or cloud account required.
+A local web app with four integrated modules: **Interview Notes**, **Leave Management**, **Todo / Task Tracker**, and **Org Chart**. All data is stored in local SQLite databases — no internet connection or cloud account required.
 
 ---
 
@@ -35,6 +35,14 @@ Lightweight task board for the hiring team.
 - Filter by project, status, priority, or due-date bucket (**Overdue / Today / Upcoming 7 days**)
 - Full-text search across title and description
 - One-click status toggle directly from the list
+
+### 4. Org Chart (`/org.html`)
+Visualise your organisation as an interactive tree.
+
+- Add nodes with **name**, **job title**, **department**, **email**, **employee ID**, **phone**, and **sort order**
+- Drag-free tree layout — set `sort_order` to control sibling ordering
+- Collapse / expand branches
+- Edit or delete any node inline; orphaned children become root nodes
 
 ---
 
@@ -74,15 +82,63 @@ npm run dev        # auto-restarts on file changes (node --watch)
 
 ---
 
+## Software updates
+
+Every page shows the current app version (from `package.json`) in the top-right of the navbar, alongside a **Check for updates** button.
+
+### How it works
+
+The update system uses **Git** to detect and apply updates. The server exposes two endpoints:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/update/check` | `GET` | Runs `git fetch` then compares `HEAD` with the upstream branch |
+| `/api/update/apply` | `POST` | Runs `git pull` and restarts the server process (`process.exit(0)`) |
+
+When an update is available, a yellow banner appears on the page with an **Update now** button. Clicking it runs `git pull` on the server and reloads the page after 2.5 seconds.
+
+The **Check for updates** button in the navbar triggers an on-demand check and shows a brief status message ("Checking… / Up to date / No updates available").
+
+### Requirements
+
+- **Git must be installed** and available on `PATH`.
+  - macOS: install via [Homebrew](https://brew.sh) (`brew install git`) or Xcode Command Line Tools (`xcode-select --install`).
+  - Windows: install from <https://git-scm.com>.
+- The app folder must be a **Git repository** with a configured **upstream remote** (i.e. cloned with `git clone`, not downloaded as a ZIP).
+- The server process must have **write access** to the app folder so `git pull` can update files.
+
+If any of these conditions are not met, the check silently returns `available: false` with a reason — no error is shown to the user.
+
+### Behind a corporate proxy
+
+If your machine routes outbound traffic through a proxy, `git fetch` / `git pull` may fail silently. Configure Git to use your proxy:
+
+```bash
+# HTTP/HTTPS proxy
+git config --global http.proxy http://proxy.example.com:8080
+
+# If your proxy requires authentication
+git config --global http.proxy http://user:password@proxy.example.com:8080
+
+# To remove the proxy setting later
+git config --global --unset http.proxy
+```
+
+On Windows the same commands work in Git Bash or Command Prompt (after installing Git for Windows).
+
+---
+
 ## Dependencies
 
-| Package | Purpose |
-|---|---|
-| `express` | HTTP server |
-| `better-sqlite3` | Synchronous SQLite access |
-| `zod` | Input validation |
-| `exceljs` | Excel export & import |
-| `multer` | Multipart file upload (for import) |
+| Package | Version | Purpose |
+|---|---|---|
+| `express` | ^5.2.1 | HTTP server |
+| `better-sqlite3` | ^12.6.2 | Synchronous SQLite access |
+| `zod` | ^4.3.6 | Input validation |
+| `exceljs` | ^4.4.0 | Excel export & import |
+| `multer` | ^2.1.1 | Multipart file upload (for import) |
+
+> **Note:** `better-sqlite3` includes a native C++ addon compiled for the host OS and Node.js version. If you move the app between machines or upgrade Node.js, delete `node_modules/` and run `npm install` again.
 
 ---
 
@@ -93,6 +149,7 @@ npm run dev        # auto-restarts on file changes (node --watch)
 | `data/hiring.sqlite` | Candidates, requisitions, panels |
 | `data/leave.sqlite` | Employees, leave records, holidays |
 | `data/todo.sqlite` | Projects, tasks |
+| `data/org.sqlite` | Org chart nodes |
 
 - If the `data/` folder is shipped with the app, all existing records will be visible on first run.
 - If `data/` is absent or empty, fresh databases are created automatically.
