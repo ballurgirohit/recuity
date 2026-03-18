@@ -3,6 +3,7 @@ const express = require('express');
 const { z } = require('zod');
 const ExcelJS = require('exceljs');
 const multer  = require('multer');
+const { execSync } = require('child_process');
 const {
   initDb,
   upsertCandidateNote,
@@ -564,6 +565,57 @@ app.delete('/api/org/nodes/:id', (req, res) => {
   const result = deleteOrgNode(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   res.json({ ok: true, deleted: result.deleted });
+});
+
+app.get('/api/update/check', (_req, res) => {
+  try {
+    execSync('git --version', { timeout: 5000 });
+  } catch {
+    return res.json({ ok: true, available: false, reason: 'git not installed' });
+  }
+
+  try {
+    execSync('git rev-parse --is-inside-work-tree', { cwd: path.join(__dirname, '..'), timeout: 5000 });
+  } catch {
+    return res.json({ ok: true, available: false, reason: 'not a git repository' });
+  }
+
+  try {
+    execSync('git fetch --quiet', { cwd: path.join(__dirname, '..'), timeout: 10000 });
+  } catch {
+    return res.json({ ok: true, available: false, reason: 'git fetch failed — no network or no remote' });
+  }
+
+  try {
+    const local  = execSync('git rev-parse HEAD',               { cwd: path.join(__dirname, '..') }).toString().trim();
+    const remote = execSync('git rev-parse @{u}',               { cwd: path.join(__dirname, '..') }).toString().trim();
+    const behind = execSync('git rev-list --count HEAD..@{u}',  { cwd: path.join(__dirname, '..') }).toString().trim();
+    return res.json({ ok: true, available: true, upToDate: local === remote, behind: Number(behind), local, remote });
+  } catch {
+    return res.json({ ok: true, available: false, reason: 'no upstream branch configured' });
+  }
+});
+
+app.post('/api/update/apply', (_req, res) => {
+  try {
+    execSync('git --version', { timeout: 5000 });
+  } catch {
+    return res.status(400).json({ ok: false, error: 'git is not installed' });
+  }
+
+  try {
+    execSync('git rev-parse --is-inside-work-tree', { cwd: path.join(__dirname, '..'), timeout: 5000 });
+  } catch {
+    return res.status(400).json({ ok: false, error: 'not a git repository' });
+  }
+
+  try {
+    const output = execSync('git pull', { cwd: path.join(__dirname, '..'), timeout: 30000 }).toString().trim();
+    res.json({ ok: true, output });
+    setTimeout(() => process.exit(0), 500);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'git pull failed', detail: err.message });
+  }
 });
 
 app.get('/api/version', (_req, res) => {

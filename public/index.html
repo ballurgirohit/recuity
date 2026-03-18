@@ -91,7 +91,17 @@
         <a class="nav-link" href="/org.html">Org</a>
       </div>
       <span id="appVersion" class="ms-auto text-muted" style="font-size:0.75rem"></span>
+      <button id="checkUpdateBtn" class="btn btn-light btn-sm ms-2" style="font-size:0.75rem;border-radius:0.5rem;">Check for updates</button>
+      <span id="checkUpdateStatus" class="text-muted ms-2" style="font-size:0.75rem;white-space:nowrap"></span>
     </nav>
+
+    <!-- Update banner -->
+    <div id="updateBanner" style="display:none;background:#fff8c5;border-bottom:1px solid #e3b341;padding:0.5rem 1rem;font-size:0.875rem;align-items:center;gap:0.75rem;">
+      <span>⬆️ A new update is available.</span>
+      <button id="updateBtn" class="btn btn-sm btn-warning" style="border-radius:0.5rem;padding:0.2rem 0.75rem;">Update now</button>
+      <span id="updateStatus" class="text-muted small"></span>
+      <button id="updateDismiss" class="btn btn-sm btn-link ms-auto text-muted" style="text-decoration:none;">Dismiss</button>
+    </div>
 
     <div class="container py-4">
       <div class="row g-3 align-items-start">
@@ -823,13 +833,56 @@
       loadPanels();
 
       // Fetch and display app version
-      async function fetchAppVersion() {
+      async function fetchAppVersion(manualCheck = false) {
         const resp = await fetch('/api/version');
         const data = await resp.json().catch(() => ({}));
         if (resp.ok && data.version) {
           $('appVersion').textContent = `v${data.version}`;
         }
+
+        try {
+          const checkResp = await fetch('/api/update/check');
+          const check = await checkResp.json().catch(() => ({}));
+          if (checkResp.ok && check.available && !check.upToDate) {
+            const banner = $('updateBanner');
+            banner.style.display = 'flex';
+
+            $('updateBtn').addEventListener('click', async () => {
+              $('updateBtn').disabled = true;
+              $('updateStatus').textContent = 'Updating…';
+              const applyResp = await fetch('/api/update/apply', { method: 'POST' });
+              if (applyResp.ok) {
+                $('updateStatus').textContent = 'Update applied. Reloading…';
+                setTimeout(() => location.reload(), 2500);
+              } else {
+                $('updateStatus').textContent = 'Update failed. Please try again later.';
+                $('updateBtn').disabled = false;
+              }
+            });
+
+            $('updateDismiss').addEventListener('click', () => {
+              banner.style.display = 'none';
+            });
+          } else if (manualCheck) {
+            $('checkUpdateStatus').textContent = 'No updates available.';
+            setTimeout(() => {
+              $('checkUpdateStatus').textContent = '';
+            }, 3000);
+          }
+        } catch {
+          if (manualCheck) {
+            $('checkUpdateStatus').textContent = 'Failed to check for updates.';
+            setTimeout(() => {
+              $('checkUpdateStatus').textContent = '';
+            }, 3000);
+          }
+        }
       }
+
+      $('checkUpdateBtn').addEventListener('click', () => {
+        $('checkUpdateStatus').textContent = 'Checking for updates…';
+        fetchAppVersion(true);
+      });
 
       fetchAppVersion();
     </script>
