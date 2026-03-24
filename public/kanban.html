@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous" />
+  <style>
+    :root {
+      --kb-bg:       #f4f6fb;
+      --kb-surface:  #ffffff;
+      --kb-border:   #e2e6ef;
+      --kb-accent:   #5b67f8;
+      --kb-radius:   10px;
+      --kb-text:     #1a1d2e;
+      --kb-muted:    #6b7280;
+      --kb-col-w:    272px;
+    }
+
+    body.kb-page {
+      background: var(--kb-bg);
+      color: var(--kb-text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Nav (matches other pages exactly) ── */
+    .kb-nav {
+      background: #fff;
+      border-bottom: 1px solid var(--kb-border);
+      padding: 0 1rem;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .kb-nav .brand { font-weight: 700; font-size: 0.95rem; color: var(--kb-text); text-decoration: none; }
+    .kb-nav a { font-size: 0.875rem; color: var(--kb-muted); text-decoration: none; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
+    .kb-nav a:hover { background: var(--kb-bg); color: var(--kb-text); }
+    .kb-nav a.active { color: var(--kb-accent); font-weight: 600; }
+
+    /* ── Top bar (board picker + toolbar) ── */
+    .kb-topbar {
+      background: var(--kb-surface);
+      border-bottom: 1px solid var(--kb-border);
+      padding: 0.5rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      z-index: 100;
+    }
+    .kb-topbar h1 { font-size: 1rem; font-weight: 700; margin: 0; }
+    .kb-board-select {
+      border: 1px solid var(--kb-border);
+      border-radius: 8px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.85rem;
+      background: var(--kb-bg);
+      color: var(--kb-text);
+      outline: none;
+      cursor: pointer;
+      max-width: 200px;
+    }
+    .kb-board-select:focus { border-color: var(--kb-accent); }
+    .kb-search {
+      border: 1px solid var(--kb-border);
+      border-radius: 8px;
+      padding: 0.3rem 0.65rem;
+      font-size: 0.85rem;
+      outline: none;
+      background: var(--kb-bg);
+      color: var(--kb-text);
+      width: 180px;
+      transition: border-color .15s;
+    }
+    .kb-search:focus { border-color: var(--kb-accent); background: #fff; }
+    .kb-filter-select {
+      border: 1px solid var(--kb-border);
+      border-radius: 8px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.82rem;
+      background: var(--kb-bg);
+      color: var(--kb-text);
+      outline: none;
+      cursor: pointer;
+    }
+    .kb-filter-select:focus { border-color: var(--kb-accent); }
+    .kb-btn {
+      background: var(--kb-accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.32rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .kb-btn:hover { opacity: .88; }
+    .kb-btn-ghost {
+      background: none;
+      color: var(--kb-muted);
+      border: 1px solid var(--kb-border);
+      border-radius: 8px;
+      padding: 0.28rem 0.75rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .13s, color .13s;
+    }
+    .kb-btn-ghost:hover { background: var(--kb-bg); color: var(--kb-text); }
+
+    /* ── Board canvas ── */
+    .kb-canvas {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 1rem;
+      overflow-x: auto;
+      overflow-y: auto;
+      height: calc(100vh - 48px - 49px);
+    }
+
+    /* ── Column ── */
+    .kb-col {
+      width: var(--kb-col-w);
+      min-width: var(--kb-col-w);
+      display: flex;
+      flex-direction: column;
+      background: #eef0f8;
+      border-radius: var(--kb-radius);
+      max-height: 100%;
+    }
+    .kb-col-header {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.6rem 0.75rem 0.5rem;
+      flex-shrink: 0;
+    }
+    .kb-col-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .kb-col-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kb-col-count {
+      font-size: 0.72rem;
+      background: #d9dce9;
+      border-radius: 10px;
+      padding: 1px 7px;
+      color: var(--kb-muted);
+      font-weight: 600;
+    }
+    .kb-col-count.wip-warn { background: #fee2e2; color: #dc2626; }
+    .kb-wip-badge {
+      font-size: 0.68rem;
+      border-radius: 5px;
+      padding: 1px 5px;
+      background: #fff3cd;
+      color: #92400e;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .kb-col-menu-btn {
+      background: none; border: none; padding: 2px 4px; cursor: pointer;
+      color: var(--kb-muted); border-radius: 5px; font-size: 0.85rem; line-height: 1;
+      transition: background .13s;
+    }
+    .kb-col-menu-btn:hover { background: #d9dce9; color: var(--kb-text); }
+
+    .kb-card-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 0.5rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-height: 40px;
+    }
+
+    /* Drag-over highlight */
+    .kb-card-list.drag-over {
+      background: rgba(91,103,248,.07);
+      border-radius: 8px;
+      outline: 2px dashed var(--kb-accent);
+    }
+
+    /* Add card button row */
+    .kb-add-card-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      width: 100%;
+      padding: 0.4rem 0.75rem;
+      background: none;
+      border: none;
+      color: var(--kb-muted);
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-radius: 0 0 var(--kb-radius) var(--kb-radius);
+      transition: background .13s, color .13s;
+      flex-shrink: 0;
+    }
+    .kb-add-card-btn:hover { background: #d9dce9; color: var(--kb-text); }
+
+    /* ── Card ── */
+    .kb-card {
+      background: var(--kb-surface);
+      border: 1px solid var(--kb-border);
+      border-radius: 8px;
+      padding: 0.6rem 0.7rem;
+      cursor: grab;
+      transition: box-shadow .15s, border-color .15s;
+      user-select: none;
+    }
+    .kb-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.09); border-color: #c9cde8; }
+    .kb-card.dragging { opacity: .45; cursor: grabbing; }
+
+    .kb-card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+      margin-bottom: 0.35rem;
+    }
+    .kb-card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      flex: 1;
+      line-height: 1.35;
+    }
+    .kb-card-edit-btn {
+      background: none; border: none; padding: 1px 5px;
+      color: var(--kb-muted); cursor: pointer; border-radius: 5px;
+      font-size: 0.75rem; opacity: 0; transition: opacity .13s, background .13s;
+      flex-shrink: 0;
+    }
+    .kb-card:hover .kb-card-edit-btn { opacity: 1; }
+    .kb-card-edit-btn:hover { background: var(--kb-bg); color: var(--kb-text); }
+
+    .kb-card-desc {
+      font-size: 0.75rem;
+      color: var(--kb-muted);
+      margin-bottom: 0.4rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .kb-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+    }
+
+    /* Priority badges */
+    .kb-pri { border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 600; }
+    .kb-pri-Low      { background: #e9fbe9; color: #166534; }
+    .kb-pri-Medium   { background: #fef9c3; color: #713f12; }
+    .kb-pri-High     { background: #ffedd5; color: #7c2d12; }
+    .kb-pri-Critical { background: #fee2e2; color: #7f1d1d; }
+
+    /* Due */
+    .kb-due { color: var(--kb-muted); font-size: 0.7rem; }
+    .kb-due.overdue   { color: #dc2626; font-weight: 600; }
+    .kb-due.today-due { color: #d97706; font-weight: 600; }
+
+    /* Assignee avatar */
+    .kb-avatar {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #d0d3f8; color: var(--kb-accent);
+      font-size: 0.62rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Label chips */
+    .kb-label {
+      border-radius: 4px; padding: 1px 5px;
+      font-size: 0.68rem; font-weight: 600;
+      background: #ede9fe; color: #5b21b6;
+    }
+
+    /* Comment count */
+    .kb-cmnt { color: var(--kb-muted); font-size: 0.7rem; }
+
+    /* ── Add-column ghost ── */
+    .kb-add-col {
+      width: 200px;
+      min-width: 200px;
+      height: 44px;
+      border: 2px dashed #c7caff;
+      border-radius: var(--kb-radius);
+      background: none;
+      color: var(--kb-accent);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      flex-shrink: 0;
+      align-self: flex-start;
+      transition: background .13s;
+    }
+    .kb-add-col:hover { background: #eef0fe; }
+
+    /* ── Empty board ── */
+    .kb-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--kb-muted);
+      gap: 0.5rem;
+    }
+    .kb-empty-icon { font-size: 2.5rem; }
+
+    /* ── Colour swatches ── */
+    .color-swatches { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .color-swatch {
+      width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: border-color .13s, transform .13s;
+    }
+    .color-swatch:hover, .color-swatch.selected { border-color: #1a1d2e; transform: scale(1.15); }
+
+    /* ── Modals ── */
+    .kb-modal .modal-content { border-radius: 14px; border: 1px solid var(--kb-border); }
+    .kb-modal .modal-header  { border-bottom: 1px solid var(--kb-border); padding: 1rem 1.25rem 0.75rem; }
+    .kb-modal .modal-footer  { border-top: 1px solid var(--kb-border); padding: 0.75rem 1.25rem; }
+    .kb-modal .form-control,
+    .kb-modal .form-select {
+      border-radius: 8px; border-color: var(--kb-border); font-size: 0.875rem;
+    }
+    .kb-modal .form-control:focus,
+    .kb-modal .form-select:focus {
+      border-color: var(--kb-accent); box-shadow: 0 0 0 3px rgba(91,103,248,.15);
+    }
+    .kb-modal label { font-size: 0.8rem; font-weight: 600; color: var(--kb-muted); margin-bottom: 3px; }
+
+    /* Card detail comment list */
+    .kb-comment-item {
+      background: var(--kb-bg);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.82rem;
+      position: relative;
+    }
+    .kb-comment-del {
+      position: absolute; top: 6px; right: 8px;
+      background: none; border: none; color: var(--kb-muted);
+      font-size: 0.72rem; cursor: pointer; opacity: 0;
+      transition: opacity .13s;
+    }
+    .kb-comment-item:hover .kb-comment-del { opacity: 1; }
+    .kb-comment-del:hover { color: #dc2626; }
+
+    /* Update banner */
+    #kbUpdateBanner {
+      display: none;
+      background: #fff8c5;
+      border-bottom: 1px solid #e3b341;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 640px) {
+      .kb-search, .kb-filter-select { display: none; }
+    }
+  </style>
+</head>
+<body class="kb-page">
+
+  <!-- ── Nav ── -->
+  <nav class="kb-nav">
+    <span class="brand">Recuity</span>
+    <a href="/index.html">Hiring</a>
+    <a href="/leave.html">Leave</a>
+    <a href="/todo.html">Todo</a>
+    <a href="/org.html">Org</a>
+    <a href="/kanban.html" class="active">Kanban</a>
+    <span id="appVersion" style="margin-left:auto;font-size:0.75rem;color:var(--kb-muted)"></span>
+    <button id="checkUpdateBtn" style="font-size:0.75rem;border-radius:0.5rem;border:1px solid #d0d7de;background:#fff;padding:0.2rem 0.6rem;cursor:pointer;">Check for updates</button>
+    <span id="checkUpdateStatus" style="font-size:0.75rem;color:var(--kb-muted);white-space:nowrap"></span>
+  </nav>
+
+  <!-- Update banner -->
+  <div id="kbUpdateBanner" style="display:none;background:#fff8c5;border-bottom:1px solid #e3b341;padding:0.5rem 1rem;font-size:0.875rem;align-items:center;gap:0.75rem;">
+    <span>⬆️ A new update is available.</span>
+    <button id="kbUpdateBtn" class="btn btn-sm btn-warning" style="border-radius:0.5rem;padding:0.2rem 0.75rem;">Update now</button>
+    <span id="kbUpdateStatus" class="text-muted small"></span>
+    <button id="kbUpdateDismiss" class="btn btn-sm btn-link ms-auto text-muted" style="text-decoration:none;">Dismiss</button>
+  </div>
+
+  <!-- ── Top bar ── -->
+  <div class="kb-topbar">
+    <h1 id="boardTitle">Kanban</h1>
+    <select class="kb-board-select" id="boardSelect">
+      <option value="">— Select board —</option>
+    </select>
+    <button class="kb-btn-ghost" id="newBoardBtn">＋ Board</button>
+    <button class="kb-btn-ghost" id="editBoardBtn" style="display:none">⚙ Edit</button>
+    <button class="kb-btn-ghost" id="deleteBoardBtn" style="display:none;color:#dc2626;border-color:#fca5a5;">✕ Delete board</button>
+    <span style="flex:1"></span>
+    <input class="kb-search" id="kbSearch" placeholder="Search cards…" autocomplete="off" />
+    <select class="kb-filter-select" id="filterPriority">
+      <option value="">All priorities</option>
+      <option>Low</option>
+      <option>Medium</option>
+      <option>High</option>
+      <option>Critical</option>
+    </select>
+    <input class="kb-filter-select" id="filterAssignee" placeholder="Assignee…" style="width:120px" autocomplete="off" />
+    <button class="kb-btn" id="addCardBtn" style="display:none">＋ Card</button>
+  </div>
+
+  <!-- ── Canvas ── -->
+  <div class="kb-canvas" id="kbCanvas">
+    <div class="kb-empty" id="kbEmpty">
+      <div class="kb-empty-icon">📋</div>
+      <div style="font-weight:600">Select or create a board to get started</div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       MODALS
+  ════════════════════════════════════════════ -->
+
+  <!-- Board modal -->
+  <div class="modal fade kb-modal" id="boardModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="boardModalLabel">New Board</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="boardName">Name <span class="text-danger">*</span></label>
+            <input id="boardName" class="form-control" placeholder="e.g. Sprint 12" autocomplete="off" />
+          </div>
+          <div class="mb-2">
+            <label for="boardDesc">Description</label>
+            <textarea id="boardDesc" class="form-control" rows="2" placeholder="Optional description…"></textarea>
+          </div>
+          <div id="boardModalErr" class="text-danger small mt-1"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="boardSaveBtn">Save</button>
+          <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column modal -->
+  <div class="modal fade kb-modal" id="colModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="colModalLabel">New Column</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="colName">Name <span class="text-danger">*</span></label>
+            <input id="colName" class="form-control form-control-sm" placeholder="e.g. In Review" autocomplete="off" />
+          </div>
+          <div class="mb-3">
+            <label>Colour</label>
+            <div class="color-swatches" id="colColorSwatches"></div>
+            <input type="hidden" id="colColor" value="#6366f1" />
+          </div>
+          <div class="mb-2">
+            <label for="colWip">WIP Limit <span style="font-weight:400;color:var(--kb-muted)">(blank = none)</span></label>
+            <input id="colWip" class="form-control form-control-sm" type="number" min="1" step="1" placeholder="e.g. 5" />
+          </div>
+          <div id="colModalErr" class="text-danger small mt-1"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary btn-sm" id="colSaveBtn">Save</button>
+          <button class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card modal -->
+  <div class="modal fade kb-modal" id="cardModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="cardModalLabel">New Card</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label for="cardTitle">Title <span class="text-danger">*</span></label>
+              <input id="cardTitle" class="form-control" placeholder="Card title" autocomplete="off" />
+            </div>
+            <div class="col-12">
+              <label for="cardDesc">Description</label>
+              <textarea id="cardDesc" class="form-control" rows="4" placeholder="Details, acceptance criteria…"></textarea>
+            </div>
+            <div class="col-sm-4">
+              <label for="cardColumn">Column <span class="text-danger">*</span></label>
+              <select id="cardColumn" class="form-select"></select>
+            </div>
+            <div class="col-sm-4">
+              <label for="cardPriority">Priority</label>
+              <select id="cardPriority" class="form-select">
+                <option>Low</option>
+                <option selected>Medium</option>
+                <option>High</option>
+                <option>Critical</option>
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label for="cardDue">Due Date</label>
+              <input id="cardDue" class="form-control" type="date" />
+            </div>
+            <div class="col-sm-6">
+              <label for="cardAssignee">Assignee</label>
+              <input id="cardAssignee" class="form-control" placeholder="Name or email" autocomplete="off" />
+            </div>
+            <div class="col-sm-6">
+              <label for="cardLabels">Labels <span style="font-weight:400;color:var(--kb-muted)">(comma-separated)</span></label>
+              <input id="cardLabels" class="form-control" placeholder="e.g. bug, frontend" autocomplete="off" />
+            </div>
+          </div>
+          <div id="cardModalErr" class="text-danger small mt-2"></div>
+
+          <!-- Comments section (shown when editing) -->
+          <div id="cardCommentSection" style="display:none;margin-top:1.25rem">
+            <hr style="border-color:var(--kb-border)" />
+            <div style="font-size:0.82rem;font-weight:700;margin-bottom:0.5rem;color:var(--kb-muted)">COMMENTS</div>
+            <div id="cardCommentList" style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.6rem"></div>
+            <div style="display:flex;gap:0.5rem">
+              <input id="cardCommentInput" class="form-control form-control-sm" placeholder="Add a comment…" autocomplete="off" />
+              <button class="btn btn-sm btn-outline-secondary" id="cardCommentSend" style="border-radius:8px;white-space:nowrap">Send</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="cardSaveBtn">Save</button>
+          <button class="btn btn-danger btn-sm me-auto" id="cardDeleteBtn" style="display:none">Delete card</button>
+          <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+    crossorigin="anonymous"></script>
+
+  <script>
+    'use strict';
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    let boards       = [];
+    let activeBoardId = null;
+    let columns      = [];   // for active board
+    let cards        = [];   // flat, all columns
+    let editingCardId = null;
+    let editingColId  = null;
+    let editingBoardId = null;
+
+    const PALETTE = [
+      '#6366f1','#8b5cf6','#ec4899','#ef4444',
+      '#f97316','#eab308','#22c55e','#14b8a6',
+      '#0ea5e9','#64748b','#1a1d2e','#f43f5e'
+    ];
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // ── Modals ─────────────────────────────────────────────────────────────────
+    const boardModal = new bootstrap.Modal($('boardModal'));
+    const colModal   = new bootstrap.Modal($('colModal'));
+    const cardModal  = new bootstrap.Modal($('cardModal'));
+
+    // ── API helper ─────────────────────────────────────────────────────────────
+    async function api(method, url, body) {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const r = await fetch(url, opts);
+      const d = await r.json().catch(() => ({}));
+      return { ok: r.ok, data: d, status: r.status };
+    }
+
+    // ── Load boards ────────────────────────────────────────────────────────────
+    async function loadBoards() {
+      const { ok, data } = await api('GET', '/api/kanban/boards');
+      if (!ok) return;
+      boards = data.boards ?? [];
+      const sel = $('boardSelect');
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">— Select board —</option>';
+      boards.forEach(b => {
+        const o = document.createElement('option');
+        o.value = b.id;
+        o.textContent = b.name;
+        sel.appendChild(o);
+      });
+      if (prev && boards.find(b => b.id == prev)) sel.value = prev;
+    }
+
+    // ── Load board data (columns + cards) ──────────────────────────────────────
+    async function loadBoard(boardId) {
+      if (!boardId) {
+        activeBoardId = null;
+        columns = []; cards = [];
+        renderCanvas();
+        $('boardTitle').textContent = 'Kanban';
+        $('editBoardBtn').style.display   = 'none';
+        $('deleteBoardBtn').style.display = 'none';
+        $('addCardBtn').style.display     = 'none';
+        return;
+      }
+      activeBoardId = Number(boardId);
+      const board = boards.find(b => b.id === activeBoardId);
+      $('boardTitle').textContent = board?.name ?? 'Kanban';
+      $('editBoardBtn').style.display   = '';
+      $('deleteBoardBtn').style.display = '';
+      $('addCardBtn').style.display     = '';
+
+      const params = buildFilterParams();
+      const [colRes, cardRes] = await Promise.all([
+        api('GET', `/api/kanban/boards/${activeBoardId}/columns`),
+        api('GET', `/api/kanban/boards/${activeBoardId}/cards${params}`)
+      ]);
+      columns = colRes.ok  ? (colRes.data.columns  ?? []) : [];
+      cards   = cardRes.ok ? (cardRes.data.cards    ?? []) : [];
+      renderCanvas();
+    }
+
+    function buildFilterParams() {
+      const p = new URLSearchParams();
+      const search   = $('kbSearch').value.trim();
+      const priority = $('filterPriority').value;
+      const assignee = $('filterAssignee').value.trim();
+      if (search)   p.set('search',   search);
+      if (priority) p.set('priority', priority);
+      if (assignee) p.set('assignee', assignee);
+      return p.toString() ? '?' + p.toString() : '';
+    }
+
+    // ── Render canvas ──────────────────────────────────────────────────────────
+    function renderCanvas() {
+      const canvas = $('kbCanvas');
+      canvas.innerHTML = '';
+
+      if (!activeBoardId || columns.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'kb-empty';
+        if (!activeBoardId) {
+          empty.innerHTML = `<div class="kb-empty-icon">📋</div><div style="font-weight:600">Select or create a board to get started</div>`;
+        } else {
+          empty.innerHTML = `<div class="kb-empty-icon">🗂️</div><div style="font-weight:600">No columns yet</div>
+            <div style="font-size:0.85rem">Click <strong>＋ Add Column</strong> to set up your workflow</div>`;
+        }
+        canvas.appendChild(empty);
+        if (activeBoardId) canvas.appendChild(makeAddColBtn());
+        return;
+      }
+
+      columns.forEach(col => canvas.appendChild(makeColumn(col)));
+      canvas.appendChild(makeAddColBtn());
+    }
+
+    function makeAddColBtn() {
+      const btn = document.createElement('button');
+      btn.className = 'kb-add-col';
+      btn.innerHTML = '＋ Add Column';
+      btn.addEventListener('click', () => openColModal());
+      return btn;
+    }
+
+    // ── Column DOM ─────────────────────────────────────────────────────────────
+    function makeColumn(col) {
+      const colCards = cards.filter(c => c.columnId === col.id);
+      const count    = colCards.length;
+      const overWip  = col.wip_limit != null && count > col.wip_limit;
+      const atWip    = col.wip_limit != null && count === col.wip_limit;
+
+      const el = document.createElement('div');
+      el.className = 'kb-col';
+      el.dataset.colId = col.id;
+
+      const wipText = col.wip_limit != null
+        ? `<span class="kb-wip-badge" title="WIP limit">WIP ${count}/${col.wip_limit}</span>`
+        : '';
+
+      el.innerHTML = `
+        <div class="kb-col-header">
+          <span class="kb-col-dot" style="background:${esc(col.color)}"></span>
+          <span class="kb-col-name" title="${esc(col.name)}">${esc(col.name)}</span>
+          <span class="kb-col-count ${overWip ? 'wip-warn' : ''}">${count}</span>
+          ${wipText}
+          <button class="kb-col-menu-btn" data-col-id="${col.id}" title="Edit column">⋯</button>
+        </div>
+        <div class="kb-card-list" data-col-id="${col.id}"></div>
+        <button class="kb-add-card-btn" data-col-id="${col.id}">＋ Add card</button>
+      `;
+
+      // Populate cards
+      const list = el.querySelector('.kb-card-list');
+      colCards.forEach(card => list.appendChild(makeCard(card)));
+
+      // Drag-and-drop on list
+      setupDropZone(list);
+
+      // Add card button
+      el.querySelector('.kb-add-card-btn').addEventListener('click', () => openCardModal(null, col.id));
+
+      // Column menu
+      el.querySelector('.kb-col-menu-btn').addEventListener('click', () => openColModal(col));
+
+      return el;
+    }
+
+    // ── Card DOM ───────────────────────────────────────────────────────────────
+    function makeCard(card) {
+      const el = document.createElement('div');
+      el.className = 'kb-card';
+      el.draggable = true;
+      el.dataset.cardId = card.id;
+
+      const labels = card.labels
+        ? card.labels.split(',').filter(Boolean).map(l => `<span class="kb-label">${esc(l.trim())}</span>`).join('')
+        : '';
+
+      let dueHtml = '';
+      if (card.dueDate) {
+        let cls = 'kb-due';
+        let txt = card.dueDate;
+        if (card.dueDate < todayStr)       { cls += ' overdue';   txt = `⚠ ${card.dueDate}`; }
+        else if (card.dueDate === todayStr) { cls += ' today-due'; txt = `📅 Today`; }
+        else                               { txt = `📅 ${card.dueDate}`; }
+        dueHtml = `<span class="${cls}">${esc(txt)}</span>`;
+      }
+
+      const avatar = card.assignee
+        ? `<span class="kb-avatar" title="${esc(card.assignee)}">${esc(card.assignee.slice(0,2).toUpperCase())}</span>`
+        : '';
+
+      const cmnt = card.commentCount > 0
+        ? `<span class="kb-cmnt">💬 ${card.commentCount}</span>`
+        : '';
+
+      el.innerHTML = `
+        <div class="kb-card-top">
+          <span class="kb-card-title">${esc(card.title)}</span>
+          <button class="kb-card-edit-btn" data-card-id="${card.id}" title="Edit">✏</button>
+        </div>
+        ${card.description ? `<div class="kb-card-desc">${esc(card.description)}</div>` : ''}
+        <div class="kb-card-meta">
+          <span class="kb-pri kb-pri-${esc(card.priority)}">${esc(card.priority)}</span>
+          ${labels}
+          ${dueHtml}
+          ${avatar}
+          ${cmnt}
+        </div>
+      `;
+
+      el.querySelector('.kb-card-edit-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        openCardModal(card);
+      });
+      el.addEventListener('dblclick', () => openCardModal(card));
+
+      // Drag events
+      el.addEventListener('dragstart', onDragStart);
+      el.addEventListener('dragend',   onDragEnd);
+
+      return el;
+    }
+
+    // ── Drag-and-drop ──────────────────────────────────────────────────────────
+    let dragCardId   = null;
+    let dragSourceColId = null;
+
+    function onDragStart(e) {
+      dragCardId      = Number(this.dataset.cardId);
+      dragSourceColId = Number(this.closest('.kb-card-list').dataset.colId);
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function onDragEnd() {
+      this.classList.remove('dragging');
+      document.querySelectorAll('.kb-card-list').forEach(l => l.classList.remove('drag-over'));
+    }
+
+    function setupDropZone(list) {
+      list.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        list.classList.add('drag-over');
+      });
+      list.addEventListener('dragleave', e => {
+        if (!list.contains(e.relatedTarget)) list.classList.remove('drag-over');
+      });
+      list.addEventListener('drop', async e => {
+        e.preventDefault();
+        list.classList.remove('drag-over');
+        if (!dragCardId) return;
+
+        const toColId = Number(list.dataset.colId);
+
+        // Check WIP limit before drop
+        const col = columns.find(c => c.id === toColId);
+        if (col?.wip_limit != null) {
+          const currentCount = cards.filter(c => c.columnId === toColId).length;
+          const movingFromSameCol = dragSourceColId === toColId;
+          if (!movingFromSameCol && currentCount >= col.wip_limit) {
+            alert(`WIP limit reached for "${col.name}" (max ${col.wip_limit} cards).`);
+            return;
+          }
+        }
+
+        // Find the card immediately after the drop position
+        let afterCardId = null;
+        const children = [...list.querySelectorAll('.kb-card:not(.dragging)')];
+        for (const child of children) {
+          const rect = child.getBoundingClientRect();
+          if (e.clientY < rect.top + rect.height / 2) {
+            // Drop before this card — afterCardId stays null (top) unless there's a card before
+            const idx = children.indexOf(child);
+            afterCardId = idx > 0 ? Number(children[idx - 1].dataset.cardId) : null;
+            break;
+          }
+          afterCardId = Number(child.dataset.cardId);
+        }
+
+        await api('PATCH', `/api/kanban/cards/${dragCardId}/move`, { toColumnId: toColId, afterCardId });
+        dragCardId = null;
+        await loadBoard(activeBoardId);
+      });
+    }
+
+    // ── Board modal ────────────────────────────────────────────────────────────
+    $('newBoardBtn').addEventListener('click', () => openBoardModal());
+    $('editBoardBtn').addEventListener('click', () => {
+      const b = boards.find(b => b.id === activeBoardId);
+      openBoardModal(b);
+    });
+
+    function openBoardModal(board = null) {
+      editingBoardId = board?.id ?? null;
+      $('boardModalLabel').textContent = board ? 'Edit Board' : 'New Board';
+      $('boardName').value = board?.name ?? '';
+      $('boardDesc').value = board?.description ?? '';
+      $('boardModalErr').textContent = '';
+      boardModal.show();
+      setTimeout(() => $('boardName').focus(), 300);
+    }
+
+    $('boardSaveBtn').addEventListener('click', async () => {
+      $('boardModalErr').textContent = '';
+      const payload = { name: $('boardName').value, description: $('boardDesc').value };
+      if (editingBoardId) payload.id = editingBoardId;
+      const { ok, data } = await api('POST', '/api/kanban/boards', payload);
+      if (!ok) {
+        $('boardModalErr').textContent = data?.details
+          ? Object.values(data.details.fieldErrors ?? {}).flat().join(', ')
+          : (data?.error ?? 'Save failed');
+        return;
+      }
+      boardModal.hide();
+      await loadBoards();
+      const boardId = data.board?.id ?? editingBoardId ?? activeBoardId;
+      $('boardSelect').value = boardId;
+      await loadBoard(boardId);
+    });
+
+    $('boardName').addEventListener('keydown', e => { if (e.key === 'Enter') $('boardSaveBtn').click(); });
+
+    $('deleteBoardBtn').addEventListener('click', async () => {
+      const b = boards.find(b => b.id === activeBoardId);
+      if (!b) return;
+      if (!confirm(`Delete board "${b.name}" and all its columns and cards? This cannot be undone.`)) return;
+      const { ok } = await api('DELETE', `/api/kanban/boards/${activeBoardId}`);
+      if (ok) { await loadBoards(); await loadBoard(null); $('boardSelect').value = ''; }
+    });
+
+    // ── Column modal ───────────────────────────────────────────────────────────
+    function renderColSwatches(selected) {
+      const host = $('colColorSwatches');
+      host.innerHTML = '';
+      for (const c of PALETTE) {
+        const s = document.createElement('div');
+        s.className = 'color-swatch' + (c === selected ? ' selected' : '');
+        s.style.background = c;
+        s.addEventListener('click', () => {
+          $('colColor').value = c;
+          host.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+          s.classList.add('selected');
+        });
+        host.appendChild(s);
+      }
+    }
+
+    function openColModal(col = null) {
+      editingColId = col?.id ?? null;
+      $('colModalLabel').textContent = col ? 'Edit Column' : 'New Column';
+      $('colName').value = col?.name ?? '';
+      const color = col?.color ?? PALETTE[0];
+      $('colColor').value = color;
+      $('colWip').value = col?.wip_limit ?? '';
+      $('colModalErr').textContent = '';
+      renderColSwatches(color);
+      colModal.show();
+      setTimeout(() => $('colName').focus(), 300);
+    }
+
+    $('colSaveBtn').addEventListener('click', async () => {
+      $('colModalErr').textContent = '';
+      if (!activeBoardId) return;
+      const payload = {
+        boardId:   activeBoardId,
+        name:      $('colName').value,
+        color:     $('colColor').value,
+        wipLimit:  $('colWip').value !== '' ? Number($('colWip').value) : null,
+        sortOrder: editingColId ? (columns.find(c => c.id === editingColId)?.sort_order ?? 0) : columns.length
+      };
+      if (editingColId) payload.id = editingColId;
+
+      const { ok, data } = await api('POST', `/api/kanban/boards/${activeBoardId}/columns`, payload);
+      if (!ok) {
+        $('colModalErr').textContent = data?.details
+          ? Object.values(data.details.fieldErrors ?? {}).flat().join(', ')
+          : (data?.error ?? 'Save failed');
+        return;
+      }
+      colModal.hide();
+
+      // Show delete option for existing columns
+      if (editingColId) {
+        const col = columns.find(c => c.id === editingColId);
+        if (col && col.card_count > 0) {
+          // handled by cascade — just reload
+        }
+      }
+      await loadBoard(activeBoardId);
+    });
+
+    // Delete column from edit modal footer (injected dynamically)
+    document.getElementById('colModal').addEventListener('show.bs.modal', () => {
+      // Remove any existing delete button
+      const old = document.getElementById('colDeleteBtn');
+      if (old) old.remove();
+    });
+    document.getElementById('colModal').addEventListener('shown.bs.modal', () => {
+      if (!editingColId) return;
+      const footer = document.querySelector('#colModal .modal-footer');
+      if (footer.querySelector('#colDeleteBtn')) return;
+      const delBtn = document.createElement('button');
+      delBtn.id = 'colDeleteBtn';
+      delBtn.className = 'btn btn-danger btn-sm me-auto';
+      delBtn.textContent = 'Delete column';
+      delBtn.addEventListener('click', async () => {
+        const col = columns.find(c => c.id === editingColId);
+        if (!confirm(`Delete column "${col?.name ?? ''}" and all its cards?`)) return;
+        const { ok } = await api('DELETE', `/api/kanban/boards/${activeBoardId}/columns/${editingColId}`);
+        if (ok) { colModal.hide(); await loadBoard(activeBoardId); }
+      });
+      footer.prepend(delBtn);
+    });
+
+    $('colName').addEventListener('keydown', e => { if (e.key === 'Enter') $('colSaveBtn').click(); });
+
+    // ── Card modal ─────────────────────────────────────────────────────────────
+    function populateColumnSelect(selectedColId) {
+      const sel = $('cardColumn');
+      sel.innerHTML = '';
+      columns.forEach(col => {
+        const o = document.createElement('option');
+        o.value = col.id;
+        o.textContent = col.name;
+        sel.appendChild(o);
+      });
+      if (selectedColId) sel.value = selectedColId;
+    }
+
+    function openCardModal(card = null, defaultColId = null) {
+      editingCardId = card?.id ?? null;
+      $('cardModalLabel').textContent = card ? 'Edit Card' : 'New Card';
+      $('cardTitle').value    = card?.title       ?? '';
+      $('cardDesc').value     = card?.description ?? '';
+      $('cardPriority').value = card?.priority    ?? 'Medium';
+      $('cardDue').value      = card?.dueDate     ?? '';
+      $('cardAssignee').value = card?.assignee    ?? '';
+      $('cardLabels').value   = card?.labels      ?? '';
+      $('cardModalErr').textContent = '';
+
+      populateColumnSelect(card?.columnId ?? defaultColId ?? columns[0]?.id);
+
+      $('cardDeleteBtn').style.display = card ? '' : 'none';
+      $('cardCommentSection').style.display = card ? '' : 'none';
+
+      if (card) loadComments(card.id);
+
+      cardModal.show();
+      setTimeout(() => $('cardTitle').focus(), 300);
+    }
+
+    $('addCardBtn').addEventListener('click', () => openCardModal(null, columns[0]?.id));
+
+    $('cardSaveBtn').addEventListener('click', async () => {
+      $('cardModalErr').textContent = '';
+      const colId = Number($('cardColumn').value);
+      if (!colId || !activeBoardId) return;
+
+      const labelsRaw = $('cardLabels').value.trim();
+      const payload = {
+        columnId:    colId,
+        boardId:     activeBoardId,
+        title:       $('cardTitle').value,
+        description: $('cardDesc').value,
+        priority:    $('cardPriority').value,
+        dueDate:     $('cardDue').value || null,
+        assignee:    $('cardAssignee').value,
+        labels:      labelsRaw ? labelsRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+      };
+      if (editingCardId) payload.id = editingCardId;
+
+      // WIP check on new card creation
+      if (!editingCardId) {
+        const col = columns.find(c => c.id === colId);
+        if (col?.wip_limit != null) {
+          const currentCount = cards.filter(c => c.columnId === colId).length;
+          if (currentCount >= col.wip_limit) {
+            $('cardModalErr').textContent = `WIP limit reached for "${col.name}" (max ${col.wip_limit}).`;
+            return;
+          }
+        }
+      }
+
+      const { ok, data } = await api('POST', `/api/kanban/boards/${activeBoardId}/cards`, payload);
+      if (!ok) {
+        $('cardModalErr').textContent = data?.details
+          ? Object.values(data.details.fieldErrors ?? {}).flat().join(', ')
+          : (data?.error ?? 'Save failed');
+        return;
+      }
+      cardModal.hide();
+      await loadBoard(activeBoardId);
+    });
+
+    $('cardDeleteBtn').addEventListener('click', async () => {
+      if (!editingCardId) return;
+      const card = cards.find(c => c.id === editingCardId);
+      if (!confirm(`Delete card "${card?.title ?? ''}"?`)) return;
+      const { ok } = await api('DELETE', `/api/kanban/cards/${editingCardId}`);
+      if (ok) { cardModal.hide(); await loadBoard(activeBoardId); }
+    });
+
+    $('cardTitle').addEventListener('keydown', e => { if (e.key === 'Enter') $('cardSaveBtn').click(); });
+
+    // ── Comments ───────────────────────────────────────────────────────────────
+    async function loadComments(cardId) {
+      const { ok, data } = await api('GET', `/api/kanban/cards/${cardId}/comments`);
+      if (!ok) return;
+      const list = $('cardCommentList');
+      list.innerHTML = '';
+      (data.comments ?? []).forEach(c => list.appendChild(makeCommentEl(c)));
+      $('cardCommentInput').value = '';
+    }
+
+    function makeCommentEl(c) {
+      const el = document.createElement('div');
+      el.className = 'kb-comment-item';
+      el.innerHTML = `
+        <div style="white-space:pre-wrap">${esc(c.body)}</div>
+        <div style="font-size:0.7rem;color:var(--kb-muted);margin-top:3px">${new Date(c.created_at).toLocaleString()}</div>
+        <button class="kb-comment-del" data-id="${c.id}" title="Delete">✕</button>
+      `;
+      el.querySelector('.kb-comment-del').addEventListener('click', async () => {
+        await api('DELETE', `/api/kanban/comments/${c.id}`);
+        if (editingCardId) loadComments(editingCardId);
+      });
+      return el;
+    }
+
+    async function sendComment() {
+      const body = $('cardCommentInput').value.trim();
+      if (!body || !editingCardId) return;
+      $('cardCommentInput').value = '';
+      await api('POST', `/api/kanban/cards/${editingCardId}/comments`, { body });
+      loadComments(editingCardId);
+    }
+
+    $('cardCommentSend').addEventListener('click', sendComment);
+    $('cardCommentInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendComment(); });
+
+    // ── Board select / filters ─────────────────────────────────────────────────
+    $('boardSelect').addEventListener('change', e => {
+      const id = e.target.value ? Number(e.target.value) : null;
+      loadBoard(id);
+    });
+
+    let filterTimer;
+    function onFilterChange() {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => { if (activeBoardId) loadBoard(activeBoardId); }, 250);
+    }
+    $('kbSearch').addEventListener('input', onFilterChange);
+    $('filterPriority').addEventListener('change', onFilterChange);
+    $('filterAssignee').addEventListener('input', onFilterChange);
+
+    // ── Version / update ───────────────────────────────────────────────────────
+    async function fetchAppVersion(manualCheck = false) {
+      const r = await fetch('/api/version').catch(() => null);
+      if (r?.ok) {
+        const d = await r.json().catch(() => null);
+        if (d?.version) $('appVersion').textContent = `v${d.version}`;
+      }
+      try {
+        const cr = await fetch('/api/update/check');
+        const c  = await cr.json().catch(() => ({}));
+        if (cr.ok && c.available && !c.upToDate) {
+          const banner = $('kbUpdateBanner');
+          banner.style.display = 'flex';
+          $('kbUpdateBtn').addEventListener('click', async () => {
+            $('kbUpdateBtn').disabled = true;
+            $('kbUpdateStatus').textContent = 'Updating…';
+            const ar = await fetch('/api/update/apply', { method: 'POST' });
+            if (ar.ok) { $('kbUpdateStatus').textContent = 'Done. Reloading…'; setTimeout(() => location.reload(), 2500); }
+            else { $('kbUpdateStatus').textContent = 'Update failed.'; $('kbUpdateBtn').disabled = false; }
+          });
+          $('kbUpdateDismiss').addEventListener('click', () => { banner.style.display = 'none'; });
+        } else if (manualCheck) {
+          $('checkUpdateStatus').textContent = 'No updates available';
+          setTimeout(() => $('checkUpdateStatus').textContent = '', 3000);
+        }
+      } catch { /* best-effort */ }
+    }
+    fetchAppVersion();
+    $('checkUpdateBtn').addEventListener('click', () => {
+      $('checkUpdateStatus').textContent = 'Checking…';
+      fetchAppVersion(true);
+    });
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    (async () => {
+      await loadBoards();
+      // Auto-select the first board if only one exists
+      if (boards.length === 1) {
+        $('boardSelect').value = boards[0].id;
+        await loadBoard(boards[0].id);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -57,6 +57,15 @@ const {
   deleteOrgNode
 } = require('./org-storage');
 
+const {
+  initKanbanDb,
+  listBoards, getBoard, upsertBoard, deleteBoard,
+  listColumns, upsertColumn, reorderColumns, deleteColumn,
+  listCards, getCard, upsertCard, moveCard, deleteCard,
+  listComments, addComment, deleteComment,
+  getBoardStats
+} = require('./kanban-storage');
+
 const { version } = require('../package.json');
 
 const app = express();
@@ -66,6 +75,7 @@ initDb();
 initLeaveDb();
 initTodoDb();
 initOrgDb();
+initKanbanDb();
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -563,6 +573,183 @@ app.delete('/api/org/nodes/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteOrgNode(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// ── Kanban API ────────────────────────────────────────────────────────────────
+
+const kbBoardSchema = z.object({
+  id:          z.number({ coerce: true }).int().positive().optional(),
+  name:        z.string().trim().min(1, 'Name is required').max(200),
+  description: z.string().trim().max(1000).default('')
+});
+
+const kbColumnSchema = z.object({
+  id:        z.number({ coerce: true }).int().positive().optional(),
+  boardId:   z.number({ coerce: true }).int().positive(),
+  name:      z.string().trim().min(1, 'Name is required').max(200),
+  color:     z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a hex color').default('#6366f1'),
+  sortOrder: z.number({ coerce: true }).int().default(0),
+  wipLimit:  z.number({ coerce: true }).int().min(1).optional().nullable()
+});
+
+const kbReorderSchema = z.object({
+  ids: z.array(z.number({ coerce: true }).int().positive()).min(1)
+});
+
+const KB_PRIORITIES = ['Low', 'Medium', 'High', 'Critical'];
+
+const kbCardSchema = z.object({
+  id:          z.number({ coerce: true }).int().positive().optional(),
+  columnId:    z.number({ coerce: true }).int().positive(),
+  boardId:     z.number({ coerce: true }).int().positive(),
+  title:       z.string().trim().min(1, 'Title is required').max(500),
+  description: z.string().trim().max(10000).default(''),
+  priority:    z.enum(['Low', 'Medium', 'High', 'Critical']).default('Medium'),
+  assignee:    z.string().trim().max(200).default(''),
+  dueDate:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  labels:      z.union([
+                 z.array(z.string().trim().max(50)),
+                 z.string().trim().max(500)
+               ]).default([]),
+  sortOrder:   z.number({ coerce: true }).int().default(0)
+});
+
+const kbMoveSchema = z.object({
+  toColumnId:  z.number({ coerce: true }).int().positive(),
+  afterCardId: z.number({ coerce: true }).int().positive().optional().nullable()
+});
+
+const kbCommentSchema = z.object({
+  body: z.string().trim().min(1, 'Comment body is required').max(5000)
+});
+
+// Boards
+app.get('/api/kanban/boards', (_req, res) => {
+  res.json({ ok: true, boards: listBoards() });
+});
+
+app.post('/api/kanban/boards', (req, res) => {
+  const parsed = kbBoardSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  try {
+    const board = upsertBoard(parsed.data);
+    res.json({ ok: true, board });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/kanban/boards/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteBoard(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+app.get('/api/kanban/boards/:id/stats', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  if (!getBoard(id)) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, stats: getBoardStats(id) });
+});
+
+// Columns
+app.get('/api/kanban/boards/:boardId/columns', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
+  res.json({ ok: true, columns: listColumns(boardId) });
+});
+
+app.post('/api/kanban/boards/:boardId/columns', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = kbColumnSchema.safeParse({ ...req.body, boardId });
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const col = upsertColumn(parsed.data);
+  if (!col) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, column: col });
+});
+
+app.put('/api/kanban/boards/:boardId/columns/reorder', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = kbReorderSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  reorderColumns(boardId, parsed.data.ids);
+  res.json({ ok: true });
+});
+
+app.delete('/api/kanban/boards/:boardId/columns/:id', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  const id      = Number(req.params.id);
+  if (!Number.isFinite(boardId) || !Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteColumn(id, boardId);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// Cards
+app.get('/api/kanban/boards/:boardId/cards', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
+  const { columnId, priority, assignee, label, search, due } = req.query;
+  if (priority && !KB_PRIORITIES.includes(priority))
+    return res.status(400).json({ error: 'InvalidPriority' });
+  const cards = listCards(boardId, { columnId, priority, assignee, label, search, due });
+  res.json({ ok: true, cards });
+});
+
+app.post('/api/kanban/boards/:boardId/cards', (req, res) => {
+  const boardId = Number(req.params.boardId);
+  if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = kbCardSchema.safeParse({ ...req.body, boardId });
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const card = upsertCard(parsed.data);
+  if (!card) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, card });
+});
+
+app.patch('/api/kanban/cards/:id/move', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = kbMoveSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const card = moveCard(id, parsed.data.toColumnId, parsed.data.afterCardId ?? null);
+  if (!card) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, card });
+});
+
+app.delete('/api/kanban/cards/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteCard(id);
+  if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
+  res.json({ ok: true, deleted: result.deleted });
+});
+
+// Comments
+app.get('/api/kanban/cards/:cardId/comments', (req, res) => {
+  const cardId = Number(req.params.cardId);
+  if (!Number.isFinite(cardId)) return res.status(400).json({ error: 'InvalidId' });
+  res.json({ ok: true, comments: listComments(cardId) });
+});
+
+app.post('/api/kanban/cards/:cardId/comments', (req, res) => {
+  const cardId = Number(req.params.cardId);
+  if (!Number.isFinite(cardId)) return res.status(400).json({ error: 'InvalidId' });
+  const parsed = kbCommentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  const comment = addComment({ cardId, body: parsed.data.body });
+  res.json({ ok: true, comment });
+});
+
+app.delete('/api/kanban/comments/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  const result = deleteComment(id);
   if (!result.deleted) return res.status(404).json({ error: 'NotFound' });
   res.json({ ok: true, deleted: result.deleted });
 });

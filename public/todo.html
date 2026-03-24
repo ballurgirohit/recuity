@@ -244,6 +244,7 @@
       <a href="/leave.html">Leave</a>
       <a href="/todo.html" class="active">Todo</a>
       <a href="/org.html">Org</a>
+      <a href="/kanban.html">Kanban</a>
       <span id="appVersion" style="margin-left:auto;font-size:0.75rem;color:var(--td-muted)"></span>
       <button id="checkUpdateBtn" style="font-size:0.75rem;border-radius:0.5rem;border:1px solid #d0d7de;background:#fff;padding:0.2rem 0.6rem;cursor:pointer;">Check for updates</button>
       <span id="checkUpdateStatus" style="font-size:0.75rem;color:var(--td-muted);white-space:nowrap"></span>
@@ -471,11 +472,11 @@
           params.set('projectId', activeView);
         }
 
-        const search   = $('tdSearch').value.trim();
-        const status   = $('filterStatus').value;
+        const search = $('tdSearch').value.trim();
+        const status = $('filterStatus').value;
         const priority = $('filterPriority').value;
-        if (search)   params.set('search',   search);
-        if (status)   params.set('status',   status);
+        if (search) params.set('search', search);
+        if (status) params.set('status', status);
         if (priority) params.set('priority', priority);
 
         const { ok, data } = await api('GET', `/api/todo/todos?${params}`);
@@ -552,10 +553,10 @@
       function renderStats() {
         const counts = { Open: 0, 'In Progress': 0, Blocked: 0, Done: 0 };
         todos.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
-        $('stat-open').textContent      = counts['Open'];
+        $('stat-open').textContent = counts['Open'];
         $('stat-inprogress').textContent = counts['In Progress'];
-        $('stat-blocked').textContent   = counts['Blocked'];
-        $('stat-done').textContent      = counts['Done'];
+        $('stat-blocked').textContent = counts['Blocked'];
+        $('stat-done').textContent = counts['Done'];
       }
 
       // ── List rendering ───────────────────────────────────────────────────
@@ -575,7 +576,7 @@
 
         // Group: active then done
         const active = todos.filter(t => t.status !== 'Done');
-        const done   = todos.filter(t => t.status === 'Done');
+        const done = todos.filter(t => t.status === 'Done');
 
         if (active.length) renderGroup(host, active);
         if (done.length) {
@@ -595,7 +596,7 @@
 
       function makeTodoCard(t) {
         const isDone = t.status === 'Done';
-        const card   = document.createElement('div');
+        const card = document.createElement('div');
         card.className = 'td-card' + (isDone ? ' done' : '');
 
         // Due date label
@@ -604,7 +605,7 @@
           let cls = 'td-due';
           let label = `Due ${t.dueDate}`;
           if (!isDone && t.dueDate < todayStr) { cls += ' overdue'; label = `Overdue · ${t.dueDate}`; }
-          else if (t.dueDate === todayStr)      { cls += ' today-due'; label = `Due today`; }
+          else if (t.dueDate === todayStr) { cls += ' today-due'; label = `Due today`; }
           dueHtml = `<span class="${cls}">${esc(label)}</span>`;
         }
 
@@ -653,12 +654,12 @@
       function openTodoModal(todo = null) {
         editingId = todo?.id ?? null;
         $('tdModalLabel').textContent = todo ? 'Edit Task' : 'New Task';
-        $('tdTitle').value    = todo?.title       ?? '';
-        $('tdDesc').value     = todo?.description ?? '';
-        $('tdPriority').value = todo?.priority    ?? 'Medium';
-        $('tdStatus').value   = todo?.status      ?? 'Open';
-        $('tdDueDate').value  = todo?.dueDate      ?? '';
-        $('tdProject').value  = todo?.projectId    ?? '';
+        $('tdTitle').value = todo?.title ?? '';
+        $('tdDesc').value = todo?.description ?? '';
+        $('tdPriority').value = todo?.priority ?? 'Medium';
+        $('tdStatus').value = todo?.status ?? 'Open';
+        $('tdDueDate').value = todo?.dueDate ?? '';
+        $('tdProject').value = todo?.projectId ?? '';
         $('tdModalErr').textContent = '';
         tdModal.show();
         setTimeout(() => $('tdTitle').focus(), 300);
@@ -669,12 +670,12 @@
       $('tdSaveBtn').addEventListener('click', async () => {
         $('tdModalErr').textContent = '';
         const payload = {
-          title:       $('tdTitle').value,
+          title: $('tdTitle').value,
           description: $('tdDesc').value,
-          priority:    $('tdPriority').value,
-          status:      $('tdStatus').value,
-          dueDate:     $('tdDueDate').value || null,
-          projectId:   $('tdProject').value ? Number($('tdProject').value) : null
+          priority: $('tdPriority').value,
+          status: $('tdStatus').value,
+          dueDate: $('tdDueDate').value || null,
+          projectId: $('tdProject').value ? Number($('tdProject').value) : null
         };
         if (editingId) payload.id = editingId;
 
@@ -736,7 +737,7 @@
       $('projSaveBtn').addEventListener('click', async () => {
         $('projModalErr').textContent = '';
         const { ok, data } = await api('POST', '/api/todo/projects', {
-          name:  $('projName').value,
+          name: $('projName').value,
           color: $('projColor').value
         });
         if (!ok) {
@@ -758,7 +759,7 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(loadTodos, 220);
       });
-      $('filterStatus').addEventListener('change',   loadTodos);
+      $('filterStatus').addEventListener('change', loadTodos);
       $('filterPriority').addEventListener('change', loadTodos);
 
       // ── Init ─────────────────────────────────────────────────────────────
