@@ -150,7 +150,7 @@
     </style>
   </head>
   <body>
-    <!-- Shared nav -->
+        <!-- Shared nav -->
     <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-3 px-3">
       <span class="navbar-brand fw-semibold">Recuity</span>
       <div class="navbar-nav">
@@ -159,10 +159,15 @@
         <a class="nav-link" href="/todo.html">Todo</a>
         <a class="nav-link active fw-semibold" href="/org.html">Org</a>
         <a class="nav-link" href="/kanban.html">Kanban</a>
+        <a class="nav-link" id="admin-link" href="/users.html" style="display:none">Users</a>
       </div>
-      <span id="appVersion" class="ms-auto text-muted" style="font-size:0.75rem"></span>
-      <button id="checkUpdateBtn" class="btn btn-light btn-sm ms-2" style="font-size:0.75rem;border-radius:0.5rem;">Check for updates</button>
-      <span id="checkUpdateStatus" class="text-muted ms-2" style="font-size:0.75rem;white-space:nowrap"></span>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <span id="appVersion" class="text-muted" style="font-size:0.75rem"></span>
+        <button id="checkUpdateBtn" class="btn btn-light btn-sm" style="font-size:0.75rem;border-radius:0.5rem;">Check for updates</button>
+        <span id="checkUpdateStatus" class="text-muted" style="font-size:0.75rem;white-space:nowrap"></span>
+        <span id="user-display" class="text-muted" style="font-size:0.875rem;display:none"></span>
+        <button onclick="logout()" class="btn btn-outline-secondary btn-sm" style="font-size:0.75rem;border-radius:0.5rem;">Logout</button>
+      </div>
     </nav>
 
     <!-- Update banner -->
@@ -561,5 +566,6 @@
 
       fetchAppVersion();
     </script>
+    <script src="/auth-check.js"></script>
   </body>
 </html>

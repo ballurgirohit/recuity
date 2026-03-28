@@ -66,19 +66,193 @@ const {
   getBoardStats
 } = require('./kanban-storage');
 
+
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcrypt');
+
+const {
+  initAuthDb,
+  createUser,
+  getUserByUsername,
+  listUsers,
+  updateUserRole,
+  deleteUser
+} = require('./auth-storage');
+
+const { requireAuth, requireAdmin, requireManagerOrAdmin, isAuthenticated, isAdmin } = require('./auth-middleware');
+
 const { version } = require('../package.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 initDb();
+initAuthDb();
 initLeaveDb();
 initTodoDb();
 initOrgDb();
 initKanbanDb();
 
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'hiring-app-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+
+
+
+// ── Authentication API ─────────────────────────────────────────────────────────
+
+const loginSchema = z.object({
+  username: z.string().trim().min(1, 'Username is required'),
+  password: z.string().min(1, 'Password is required')
+});
+
+const registerSchema = z.object({
+  username: z.string().trim().min(3, 'Username must be at least 3 characters').max(50),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().trim().email('Must be a valid email').optional(),
+  role: z.enum(['admin', 'manager', 'viewer']).optional().default('viewer')
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const users = listUsers();
+  
+  if (users.length > 0) {
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ error: 'Authentication required. Only admins can create users.' });
+    }
+    if (req.session.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can create new users' });
+    }
+  }
+
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  }
+
+  const { username, password, email, role } = parsed.data;
+  
+  const existing = getUserByUsername(username);
+  if (existing) {
+    return res.status(409).json({ error: 'Username already exists' });
+  }
+
+  const userRole = users.length === 0 ? 'admin' : (role || 'viewer');
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = createUser({ username, passwordHash, email, role: userRole });
+
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  req.session.role = user.role;
+
+  res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
+  }
+
+  const { username, password } = parsed.data;
+  const user = getUserByUsername(username);
+
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
+
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  req.session.role = user.role;
+
+  res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to logout' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ ok: true, message: 'Logged out successfully' });
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const user = getUserByUsername(req.session.username);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+});
+
+// ── User Management API (Admin only) ───────────────────────────────────────────
+
+app.get('/api/users', requireAdmin, (req, res) => {
+  const users = listUsers();
+  res.json({ ok: true, users });
+});
+
+app.patch('/api/users/:id/role', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  
+  const { role } = req.body;
+  if (!role || !['admin', 'manager', 'viewer'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be admin, manager, or viewer' });
+  }
+  
+  // Prevent removing the last admin
+  if (role !== 'admin') {
+    const admins = listUsers().filter(u => u.role === 'admin');
+    const targetUser = admins.find(u => u.id === id);
+    if (targetUser && admins.length === 1) {
+      return res.status(400).json({ error: 'Cannot change role of the last admin' });
+    }
+  }
+  
+  const user = updateUserRole(id, role);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({ ok: true, user });
+});
+
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
+  
+  // Prevent deleting yourself
+  if (id === req.session.userId) {
+    return res.status(400).json({ error: 'Cannot delete your own account' });
+  }
+  
+  // Prevent deleting the last admin
+  const admins = listUsers().filter(u => u.role === 'admin');
+  const targetUser = admins.find(u => u.id === id);
+  if (targetUser && admins.length === 1) {
+    return res.status(400).json({ error: 'Cannot delete the last admin' });
+  }
+  
+  const result = deleteUser(id);
+  if (!result.deleted) return res.status(404).json({ error: 'User not found' });
+  res.json({ ok: true, deleted: result.deleted });
+});
 
 const allowedStatuses = [
   'New',
@@ -109,7 +283,7 @@ const upsertSchema = z.object({
   }
 });
 
-app.post('/api/notes', (req, res) => {
+app.post('/api/notes', requireManagerOrAdmin, (req, res) => {
   const parsed = upsertSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
@@ -161,7 +335,7 @@ app.get('/api/notes/:email', (req, res) => {
   return res.json({ ok: true, note });
 });
 
-app.delete('/api/notes/:email', (req, res) => {
+app.delete('/api/notes/:email', requireManagerOrAdmin, (req, res) => {
   const email = String(req.params.email ?? '').trim();
   if (!email) return res.status(400).json({ error: 'EmailRequired' });
 
@@ -170,7 +344,7 @@ app.delete('/api/notes/:email', (req, res) => {
   return res.json({ ok: true, deleted: result.deleted });
 });
 
-app.delete('/api/notes/id/:id', (req, res) => {
+app.delete('/api/notes/id/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'IdRequired' });
 
@@ -192,7 +366,7 @@ app.get('/api/requisitions', (req, res) => {
   return res.json({ ok: true, requisitions: items });
 });
 
-app.post('/api/requisitions', (req, res) => {
+app.post('/api/requisitions', requireManagerOrAdmin, (req, res) => {
   const parsed = requisitionSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
@@ -202,7 +376,7 @@ app.post('/api/requisitions', (req, res) => {
   return res.json({ ok: true, requisition: saved });
 });
 
-app.delete('/api/requisitions/:reqId', (req, res) => {
+app.delete('/api/requisitions/:reqId', requireManagerOrAdmin, (req, res) => {
   const reqId = String(req.params.reqId ?? '').trim();
   if (!reqId) return res.status(400).json({ error: 'ReqIdRequired' });
 
@@ -263,14 +437,14 @@ app.get('/api/leave/employees', (_req, res) => {
   res.json({ ok: true, employees: listEmployees() });
 });
 
-app.post('/api/leave/employees', (req, res) => {
+app.post('/api/leave/employees', requireManagerOrAdmin, (req, res) => {
   const parsed = employeeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   const emp = upsertEmployee(parsed.data);
   res.json({ ok: true, employee: emp });
 });
 
-app.delete('/api/leave/employees/:id', (req, res) => {
+app.delete('/api/leave/employees/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteEmployee(id);
@@ -285,14 +459,14 @@ app.get('/api/leave/month/:yearMonth', (req, res) => {
   res.json({ ok: true, leaves: getLeavesForMonth(ym) });
 });
 
-app.post('/api/leave/leaves', (req, res) => {
+app.post('/api/leave/leaves', requireManagerOrAdmin, (req, res) => {
   const parsed = leaveSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   const leave = upsertLeave(parsed.data);
   res.json({ ok: true, leave });
 });
 
-app.delete('/api/leave/leaves/:id', (req, res) => {
+app.delete('/api/leave/leaves/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteLeave(id);
@@ -305,14 +479,14 @@ app.get('/api/leave/holidays', (_req, res) => {
   res.json({ ok: true, holidays: listAllHolidays() });
 });
 
-app.post('/api/leave/holidays', (req, res) => {
+app.post('/api/leave/holidays', requireManagerOrAdmin, (req, res) => {
   const parsed = holidaySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   const holiday = upsertHoliday(parsed.data);
   res.json({ ok: true, holiday });
 });
 
-app.delete('/api/leave/holidays/:id', (req, res) => {
+app.delete('/api/leave/holidays/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteHoliday(id);
@@ -325,7 +499,7 @@ app.get('/api/panels', (_req, res) => {
   res.json({ ok: true, panels: listPanels() });
 });
 
-app.post('/api/panels', (req, res) => {
+app.post('/api/panels', requireManagerOrAdmin, (req, res) => {
   const parsed = panelSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
@@ -334,7 +508,7 @@ app.post('/api/panels', (req, res) => {
   return res.json({ ok: true, panel: saved });
 });
 
-app.delete('/api/panels/:id', (req, res) => {
+app.delete('/api/panels/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deletePanel(id);
@@ -485,14 +659,14 @@ app.get('/api/todo/projects', (_req, res) => {
   res.json({ ok: true, projects: listProjects() });
 });
 
-app.post('/api/todo/projects', (req, res) => {
+app.post('/api/todo/projects', requireManagerOrAdmin, (req, res) => {
   const parsed = todoProjectSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   const project = upsertProject(parsed.data);
   res.json({ ok: true, project });
 });
 
-app.delete('/api/todo/projects/:id', (req, res) => {
+app.delete('/api/todo/projects/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteProject(id);
@@ -511,14 +685,14 @@ app.get('/api/todo/todos', (req, res) => {
   res.json({ ok: true, todos });
 });
 
-app.post('/api/todo/todos', (req, res) => {
+app.post('/api/todo/todos', requireManagerOrAdmin, (req, res) => {
   const parsed = todoSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   const todo = upsertTodo(parsed.data);
   res.json({ ok: true, todo });
 });
 
-app.patch('/api/todo/todos/:id/status', (req, res) => {
+app.patch('/api/todo/todos/:id/status', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = todoStatusSchema.safeParse(req.body);
@@ -528,7 +702,7 @@ app.patch('/api/todo/todos/:id/status', (req, res) => {
   res.json({ ok: true, todo });
 });
 
-app.delete('/api/todo/todos/:id', (req, res) => {
+app.delete('/api/todo/todos/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteTodo(id);
@@ -558,7 +732,7 @@ app.get('/api/org/nodes', (_req, res) => {
   res.json({ ok: true, nodes: listOrgNodes() });
 });
 
-app.post('/api/org/nodes', (req, res) => {
+app.post('/api/org/nodes', requireManagerOrAdmin, (req, res) => {
   const parsed = orgNodeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   try {
@@ -569,7 +743,7 @@ app.post('/api/org/nodes', (req, res) => {
   }
 });
 
-app.delete('/api/org/nodes/:id', (req, res) => {
+app.delete('/api/org/nodes/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteOrgNode(id);
@@ -630,7 +804,7 @@ app.get('/api/kanban/boards', (_req, res) => {
   res.json({ ok: true, boards: listBoards() });
 });
 
-app.post('/api/kanban/boards', (req, res) => {
+app.post('/api/kanban/boards', requireManagerOrAdmin, (req, res) => {
   const parsed = kbBoardSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'ValidationError', details: parsed.error.flatten() });
   try {
@@ -641,7 +815,7 @@ app.post('/api/kanban/boards', (req, res) => {
   }
 });
 
-app.delete('/api/kanban/boards/:id', (req, res) => {
+app.delete('/api/kanban/boards/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteBoard(id);
@@ -663,7 +837,7 @@ app.get('/api/kanban/boards/:boardId/columns', (req, res) => {
   res.json({ ok: true, columns: listColumns(boardId) });
 });
 
-app.post('/api/kanban/boards/:boardId/columns', (req, res) => {
+app.post('/api/kanban/boards/:boardId/columns', requireManagerOrAdmin, (req, res) => {
   const boardId = Number(req.params.boardId);
   if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = kbColumnSchema.safeParse({ ...req.body, boardId });
@@ -673,7 +847,7 @@ app.post('/api/kanban/boards/:boardId/columns', (req, res) => {
   res.json({ ok: true, column: col });
 });
 
-app.put('/api/kanban/boards/:boardId/columns/reorder', (req, res) => {
+app.put('/api/kanban/boards/:boardId/columns/reorder', requireManagerOrAdmin, (req, res) => {
   const boardId = Number(req.params.boardId);
   if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = kbReorderSchema.safeParse(req.body);
@@ -682,7 +856,7 @@ app.put('/api/kanban/boards/:boardId/columns/reorder', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/kanban/boards/:boardId/columns/:id', (req, res) => {
+app.delete('/api/kanban/boards/:boardId/columns/:id', requireManagerOrAdmin, (req, res) => {
   const boardId = Number(req.params.boardId);
   const id      = Number(req.params.id);
   if (!Number.isFinite(boardId) || !Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
@@ -702,7 +876,7 @@ app.get('/api/kanban/boards/:boardId/cards', (req, res) => {
   res.json({ ok: true, cards });
 });
 
-app.post('/api/kanban/boards/:boardId/cards', (req, res) => {
+app.post('/api/kanban/boards/:boardId/cards', requireManagerOrAdmin, (req, res) => {
   const boardId = Number(req.params.boardId);
   if (!Number.isFinite(boardId)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = kbCardSchema.safeParse({ ...req.body, boardId });
@@ -712,7 +886,7 @@ app.post('/api/kanban/boards/:boardId/cards', (req, res) => {
   res.json({ ok: true, card });
 });
 
-app.patch('/api/kanban/cards/:id/move', (req, res) => {
+app.patch('/api/kanban/cards/:id/move', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = kbMoveSchema.safeParse(req.body);
@@ -722,7 +896,7 @@ app.patch('/api/kanban/cards/:id/move', (req, res) => {
   res.json({ ok: true, card });
 });
 
-app.delete('/api/kanban/cards/:id', (req, res) => {
+app.delete('/api/kanban/cards/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteCard(id);
@@ -737,7 +911,7 @@ app.get('/api/kanban/cards/:cardId/comments', (req, res) => {
   res.json({ ok: true, comments: listComments(cardId) });
 });
 
-app.post('/api/kanban/cards/:cardId/comments', (req, res) => {
+app.post('/api/kanban/cards/:cardId/comments', requireManagerOrAdmin, (req, res) => {
   const cardId = Number(req.params.cardId);
   if (!Number.isFinite(cardId)) return res.status(400).json({ error: 'InvalidId' });
   const parsed = kbCommentSchema.safeParse(req.body);
@@ -746,7 +920,7 @@ app.post('/api/kanban/cards/:cardId/comments', (req, res) => {
   res.json({ ok: true, comment });
 });
 
-app.delete('/api/kanban/comments/:id', (req, res) => {
+app.delete('/api/kanban/comments/:id', requireManagerOrAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'InvalidId' });
   const result = deleteComment(id);

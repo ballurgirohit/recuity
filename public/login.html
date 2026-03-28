@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Hiring Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      max-width: 420px;
+      padding: 40px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo h1 {
+      color: #667eea;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .logo p {
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 12px;
+      background: none;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+    }
+
+    .tab.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+
+    .tab:hover {
+      color: #667eea;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #374151;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: all 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    input.error {
+      border-color: #ef4444;
+    }
+
+    .error-message {
+      color: #ef4444;
+      font-size: 13px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 10px;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .form-section {
+      display: none;
+    }
+
+    .form-section.active {
+      display: block;
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .alert.show {
+      display: block;
+    }
+
+    .alert.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .alert.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .password-requirements {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">
+      <h1>🎯 Hiring Manager</h1>
+      <p>Manage your recruitment pipeline</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('login')">Login</button>
+      <button class="tab" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <div id="alert" class="alert"></div>
+
+    <!-- Login Form -->
+    <div id="login-form" class="form-section active">
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" name="username" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" name="password" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="submit-btn" id="login-btn">Sign In</button>
+      </form>
+    </div>
+
+    <!-- Register Form -->
+    <div id="register-form" class="form-section">
+      <form onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="register-username">Username</label>
+          <input type="text" id="register-username" name="username" required minlength="3" maxlength="50" autocomplete="username">
+          <div class="error-message" id="username-error"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="register-email">Email (optional)</label>
+          <input type="email" id="register-email" name="email" autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label for="register-password">Password</label>
+          <input type="password" id="register-password" name="password" required minlength="6" autocomplete="new-password">
+          <p class="password-requirements">Must be at least 6 characters long</p>
+          <div class="error-message" id="password-error"></div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="register-btn">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+
+      // Update form sections
+      document.querySelectorAll('.form-section').forEach(f => f.classList.remove('active'));
+      document.getElementById(`${tab}-form`).classList.add('active');
+
+      // Clear alert
+      hideAlert();
+    }
+
+    function showAlert(message, type = 'error') {
+      const alert = document.getElementById('alert');
+      alert.textContent = message;
+      alert.className = `alert ${type} show`;
+    }
+
+    function hideAlert() {
+      const alert = document.getElementById('alert');
+      alert.className = 'alert';
+    }
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      hideAlert();
+
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+
+      const formData = new FormData(event.target);
+      const data = {
+        username: formData.get('username'),
+        password: formData.get('password')
+      };
+
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showAlert('Login successful! Redirecting...', 'success');
+          setTimeout(() => {
+            window.location.href = '/index.html';
+          }, 1000);
+        } else {
+          showAlert(result.error || 'Login failed. Please try again.');
+          btn.disabled = false;
+          btn.textContent = 'Sign In';
+        }
+      } catch (error) {
+        showAlert('Network error. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleRegister(event) {
+      event.preventDefault();
+      hideAlert();
+
+      const btn = document.getElementById('register-btn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      const formData = new FormData(event.target);
+      const data = {
+        username: formData.get('username'),
+        password: formData.get('password'),
+        email: formData.get('email') || undefined
+      };
+
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showAlert('Account created successfully! Redirecting...', 'success');
+          setTimeout(() => {
+            window.location.href = '/index.html';
+          }, 1000);
+        } else {
+          if (result.details) {
+            const errors = result.details.fieldErrors;
+            if (errors.username) showAlert(errors.username[0]);
+            else if (errors.password) showAlert(errors.password[0]);
+            else if (errors.email) showAlert(errors.email[0]);
+            else showAlert(result.error || 'Registration failed.');
+          } else {
+            showAlert(result.error || 'Registration failed. Please try again.');
+          }
+          btn.disabled = false;
+          btn.textContent = 'Create Account';
+        }
+      } catch (error) {
+        showAlert('Network error. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    }
+
+    // Check if already logged in
+    (async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          window.location.href = '/index.html';
+        }
+      } catch (error) {
+        // Not logged in, stay on login page
+      }
+    })();
+  </script>
+</body>
+</html>
